@@ -1,5 +1,11 @@
 "use client";
 
+import {
+  EchoDirectionC2S,
+  EchoDirectionS2C,
+  MessagePayload,
+  RegisterPayload,
+} from "@/apis/types";
 import { ContentCopy, CopyAll, Refresh } from "@mui/icons-material";
 import {
   Box,
@@ -15,7 +21,7 @@ import {
   IconButton,
   Paper,
 } from "@mui/material";
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 
 const googleStunServer = "stun:stun.l.google.com:19302";
 
@@ -300,20 +306,141 @@ function AnswerDialog(props: {
   );
 }
 
-function WSPanel() {
+const wsAddr = "ws://localhost:3001/ws";
+const pingIntvMs = 1000;
+
+function WSPanel(props: {
+  wsUrl: string;
+  myName: string;
+  onNameChange: (name: string) => void;
+}) {
+  const { wsUrl, myName, onNameChange } = props;
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
+  const wsRef = useRef<WebSocket | null>(null);
+  const correlationId = useMemo(() => crypto.randomUUID(), []);
+
+  const [showChangeName, setShowChangeName] = useState(false);
+  const [nodeId, setNodeId] = useState<string>("");
+  const seqRef = useRef(0);
+  const pingTxMapRef = useRef<Record<string, number>>({});
+  const [rtt, setRtt] = useState<number | undefined>(undefined);
+  const [lastSeq, setLastSeq] = useState<number | undefined>(undefined);
+  const connectedAtRef = useRef<number | undefined>(undefined);
+  const [upTime, setUpTime] = useState<number | undefined>(undefined);
+
+  const doConnect = (addr: string) => {
+    setConnecting(true);
+    const ws = new WebSocket(addr);
+    wsRef.current = ws;
+
+    let it: ReturnType<typeof setInterval> | undefined = undefined;
+
+    ws.onopen = () => {
+      connectedAtRef.current = Date.now();
+      setConnected(true);
+      setConnecting(false);
+      console.log("[dbg] ws connected", ws);
+      const registerPayload: RegisterPayload = {
+        node_name: myName,
+      };
+      const registerMsg: MessagePayload = {
+        register: registerPayload,
+      };
+      ws.send(JSON.stringify(registerMsg));
+
+      it = setInterval(() => {
+        const seq = seqRef.current ?? 0;
+        const echoMsg: MessagePayload = {
+          echo: {
+            direction: EchoDirectionC2S,
+            correlation_id: correlationId,
+            server_timestamp: 0,
+            timestamp: Date.now(),
+            seq_id: seq,
+          },
+        };
+        const nextSeq = seq + 1;
+        seqRef.current = nextSeq;
+        pingTxMapRef.current[seq.toString()] = Date.now();
+        ws.send(JSON.stringify(echoMsg));
+      }, pingIntvMs);
+    };
+    ws.onclose = () => {
+      setConnected(false);
+      setConnecting(false);
+    };
+    ws.onerror = (error) => {
+      console.error("[dbg] ws error", error);
+      setConnecting(false);
+    };
+    ws.onmessage = (event) => {
+      try {
+        const msg: MessagePayload = JSON.parse(event.data);
+        if (msg.node_id) {
+          setNodeId(msg.node_id);
+        }
+        const echo = msg.echo;
+        if (echo && echo.direction === EchoDirectionS2C) {
+          const now = Date.now();
+          const t0 = pingTxMapRef.current[echo.seq_id.toString()];
+          if (t0 !== undefined) {
+            const rtt = now - t0;
+            setRtt(rtt);
+            setLastSeq(echo.seq_id);
+
+            const connectedAt = connectedAtRef.current;
+            if (connectedAt !== undefined) {
+              const upTime = now - (connectedAt ?? 0);
+              setUpTime(upTime);
+            }
+          }
+        }
+      } catch (e) {
+        console.error("[dbg] ws message error", e);
+      }
+    };
+  };
+
   return (
     <Fragment>
       <Box>
         {connected ? (
-          <Box>Connected</Box>
+          <Box>
+            <Box>
+              Connected to {wsRef?.current?.url} as {myName}
+            </Box>
+            {nodeId && <Box>NodeId: {nodeId}</Box>}
+
+            {rtt !== undefined && <Box>RTT: {rtt}ms</Box>}
+            {lastSeq !== undefined && <Box>Last Seq: {lastSeq}</Box>}
+            {upTime !== undefined && (
+              <Box>
+                Up Time:{" "}
+                {(upTime / 1000)
+                  .toFixed(3)
+                  .replace(/0+$/, "")
+                  .replace(/\.$/, "")}
+                s
+              </Box>
+            )}
+
+            <Box>
+              <Button
+                onClick={() => {
+                  setShowChangeName(true);
+                }}
+              >
+                Change Name
+              </Button>
+            </Box>
+          </Box>
         ) : (
           <Box>
             <Button
               loading={connecting}
               onClick={() => {
-                setConnecting(true);
+                doConnect(wsAddr);
               }}
             >
               Connect
@@ -439,13 +566,14 @@ export default function Home() {
       pc.close();
     };
   }, []);
+  const [myName, setMyName] = useState("user");
 
   return (
     <Fragment>
       <Box sx={{ display: "flex", flexDirection: "row", height: "100vh" }}>
         <LeftPanel>
           <Box sx={{ padding: 2 }}>
-            <WSPanel />
+            <WSPanel myName={myName} wsUrl={wsAddr} onNameChange={setMyName} />
           </Box>
         </LeftPanel>
         <Box sx={{ padding: 2, flex: 1 }}>

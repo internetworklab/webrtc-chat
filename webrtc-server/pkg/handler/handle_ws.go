@@ -53,6 +53,7 @@ func (handler *WebsocketHandler) handleTextMessage(key string, conn *websocket.C
 					Timestamp:       payload.Echo.Timestamp,
 					SeqID:           payload.Echo.SeqID,
 				},
+				NodeId: key,
 			}
 			responseJSON, err := json.Marshal(responsePayload)
 			if err != nil {
