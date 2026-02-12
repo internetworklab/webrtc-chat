@@ -580,7 +580,7 @@ export default function Home() {
   const name = conns
     ? conns.find((conn) => conn.node_id === nodeId)?.entry?.node_name
     : undefined;
-  const nameDisplay = name ? `as ${name}` : "";
+
   const [nameEdited, setNameEdited] = useState<string>("");
   const [activeConn, setActiveConn] = useState("");
   const [showChangeName, setShowChangeName] = useState(false);
@@ -651,75 +651,48 @@ export default function Home() {
       <Box sx={{ display: "flex", flexDirection: "row", height: "100vh" }}>
         <LeftPanel>
           <Box>
-            <Fragment>
-              <Box>
-                {connected ? (
+            <Box>
+              {connected ? (
+                <Box>
+                  <BasicWsInfo
+                    name={name}
+                    url={wsRef?.current?.url}
+                    rtt={rtt}
+                    nodeId={nodeId}
+                    lastSeq={lastSeq}
+                    upTime={upTime}
+                    onNameChangeRequested={() => {
+                      setNameEdited(name ?? "");
+                      setShowChangeName(true);
+                    }}
+                  />
                   <Box>
-                    <BasicWsInfo
-                      name={name}
-                      url={wsRef?.current?.url}
-                      rtt={rtt}
-                      nodeId={nodeId}
-                      lastSeq={lastSeq}
-                      upTime={upTime}
-                      onNameChangeRequested={() => {
-                        setNameEdited(name ?? "");
-                        setShowChangeName(true);
-                      }}
-                    />
+                    <Box sx={{ padding: 2 }}>Peers</Box>
                     <Box>
-                      <Box sx={{ padding: 2 }}>Peers</Box>
-                      <Box>
-                        {conns.map((conn) => (
-                          <RenderPeerEntry
-                            conn={conn}
-                            key={conn.node_id}
-                            activeNodeId={activeConn}
-                            onSelect={() => switchActiveConn(conn.node_id)}
-                          />
-                        ))}
-                      </Box>
+                      {conns.map((conn) => (
+                        <RenderPeerEntry
+                          conn={conn}
+                          key={conn.node_id}
+                          activeNodeId={activeConn}
+                          onSelect={() => switchActiveConn(conn.node_id)}
+                        />
+                      ))}
                     </Box>
                   </Box>
-                ) : (
-                  <Box>
-                    <Button
-                      loading={connecting}
-                      onClick={() => {
-                        doConnect(wsAddr);
-                      }}
-                    >
-                      Connect
-                    </Button>
-                  </Box>
-                )}
-              </Box>
-              <ChangeNameDialog
-                name={nameEdited}
-                onNameChange={(name) => {
-                  setNameEdited(name);
-                }}
-                open={showChangeName}
-                onClose={() => {
-                  setShowChangeName(false);
-                }}
-                onConfirm={(newName) => {
-                  return new Promise((resolve) => {
-                    const renamePayload: RenamePayload = {
-                      new_node_name: newName,
-                      origin_node_name: name,
-                    };
-                    const renameMsg: MessagePayload = {
-                      rename: renamePayload,
-                    };
-                    wsRef.current?.send(JSON.stringify(renameMsg));
-
-                    resolve();
-                    setShowChangeName(false);
-                  });
-                }}
-              />
-            </Fragment>
+                </Box>
+              ) : (
+                <Box>
+                  <Button
+                    loading={connecting}
+                    onClick={() => {
+                      doConnect(wsAddr);
+                    }}
+                  >
+                    Connect
+                  </Button>
+                </Box>
+              )}
+            </Box>
           </Box>
         </LeftPanel>
         <Box
@@ -741,42 +714,30 @@ export default function Home() {
             ))}
         </Box>
       </Box>
+      <ChangeNameDialog
+        name={nameEdited}
+        onNameChange={(name) => {
+          setNameEdited(name);
+        }}
+        open={showChangeName}
+        onClose={() => {
+          setShowChangeName(false);
+        }}
+        onConfirm={(newName) => {
+          return new Promise((resolve) => {
+            const renamePayload: RenamePayload = {
+              new_node_name: newName,
+              origin_node_name: name,
+            };
+            const renameMsg: MessagePayload = {
+              rename: renamePayload,
+            };
+            wsRef.current?.send(JSON.stringify(renameMsg));
 
-      <CandidateInputDialog
-        peerConnectionRef={peerConnectionRef}
-        open={addCandidateDlgOpen}
-        onClose={() => {
-          setAddCandidateDlgOpen(false);
+            resolve();
+            setShowChangeName(false);
+          });
         }}
-      />
-      <RemoteDescriptionInputDialog
-        peerConnectionRef={peerConnectionRef}
-        open={setRemoteDescriptionDlgOpen}
-        onClose={() => {
-          setSetRemoteDescriptionDlgOpen(false);
-        }}
-      />
-      <LocalDescriptionInputDialog
-        peerConnectionRef={peerConnectionRef}
-        open={setLocalDescriptionDlgOpen}
-        onClose={() => {
-          setSetLocalDescriptionDlgOpen(false);
-        }}
-      />
-      <OfferDialog
-        peerConnectionRef={peerConnectionRef}
-        dataChannelRef={dataChannelRef}
-        open={offerDlgOpen}
-        onClose={() => {
-          setOfferDlgOpen(false);
-        }}
-      />
-      <AnswerDialog
-        open={showAnswerDlg}
-        onClose={() => {
-          setShowAnswerDlg(false);
-        }}
-        peerConnectionRef={peerConnectionRef}
       />
     </Fragment>
   );
