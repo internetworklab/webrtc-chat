@@ -11,16 +11,35 @@ export interface RenamePayload {
 }
 
 // type MessagePayload struct {
-//  	Register               *pkgconnreg.RegisterPayload               `json:"register,omitempty"`
-//  	Echo                   *pkgconnreg.EchoPayload                   `json:"echo,omitempty"`
-//  	AttributesAnnouncement *pkgconnreg.AttributesAnnouncementPayload `json:"attributes_announcement,omitempty"`
+// 	NodeId   string                      `json:"node_id,omitempty"`
+// 	Register *pkgconnreg.RegisterPayload `json:"register,omitempty"`
+// 	Echo     *pkgconnreg.EchoPayload     `json:"echo,omitempty"`
+
+// 	// emit when some node changes its name
+// 	Rename *pkgconnreg.RenamePayload `json:"rename,omitempty"`
+
+// 	// emit when node goes online
+// 	Online *pkgconnreg.NodeGoesOnline `json:"online,omitempty"`
+
+// 	// SDP and ICE offers are concepts from WebRTC
+// 	SDPOffer *pkgconnreg.SDPOfferPayload `json:"sdp_offer,omitempty"`
+// 	ICEOffer *pkgconnreg.ICEOfferPayload `json:"ice_offer,omitempty"`
+
+// 	AttributesAnnouncement *pkgconnreg.AttributesAnnouncementPayload `json:"attributes_announcement,omitempty"`
 // }
+
 export interface MessagePayload {
   node_id?: string;
+  // emits when register success
   register?: RegisterPayload;
   echo?: EchoPayload;
   online?: any;
   rename?: RenamePayload;
+
+  // SDP and ICE offers are concepts from WebRTC
+  sdp_offer?: SDPOfferPayload;
+  ice_offer?: ICEOfferPayload;
+
   attributes_announcement?: AttributesAnnouncementPayload;
 }
 
@@ -101,3 +120,21 @@ export type ConnEntry = {
   registered_at: number;
   entry: ConnRegistryData;
 };
+
+export enum OfferType {
+  Offer = "offer",
+  Answer = "answer",
+}
+
+export interface SDPOfferPayload {
+  type: OfferType;
+  offer_json: string;
+  from_node_id: string;
+  to_node_id: string;
+}
+
+export interface ICEOfferPayload {
+  offer_json: string;
+  from_node_id: string;
+  to_node_id: string;
+}

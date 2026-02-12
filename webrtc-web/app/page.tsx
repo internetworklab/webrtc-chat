@@ -33,6 +33,7 @@ function useWs() {
   const correlationId = useMemo(() => crypto.randomUUID(), []);
 
   const [nodeId, setNodeId] = useState<string>("");
+  const nodeIdRef = useRef<string>("");
   const seqRef = useRef(0);
   const pingTxMapRef = useRef<Record<string, number>>({});
   const [rtt, setRtt] = useState<number | undefined>(undefined);
@@ -56,7 +57,6 @@ function useWs() {
       connectedAtRef.current = Date.now();
       setConnected(true);
       setConnecting(false);
-      console.log("[dbg] ws connected", ws);
       const registerPayload: RegisterPayload = {
         node_name: "",
       };
@@ -101,9 +101,6 @@ function useWs() {
     ws.onmessage = (event) => {
       try {
         const msg: MessagePayload = JSON.parse(event.data);
-        if (msg.node_id) {
-          setNodeId(msg.node_id);
-        }
         const echo = msg.echo;
         if (echo && echo.direction === EchoDirectionS2C) {
           const now = Date.now();
@@ -130,13 +127,17 @@ function useWs() {
           doRefresh();
         }
         if (msg.register) {
+          if (msg.node_id) {
+            setNodeId(msg.node_id);
+            nodeIdRef.current = msg.node_id;
+          }
           doRefresh();
         }
         if (msg.rename) {
           doRefresh();
         }
       } catch (e) {
-        console.error("[dbg] ws message error", e);
+        console.error("Failed to handle ws message", e);
       }
     };
   };

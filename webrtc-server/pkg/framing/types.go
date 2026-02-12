@@ -15,5 +15,9 @@ type MessagePayload struct {
 	// emit when node goes online
 	Online *pkgconnreg.NodeGoesOnline `json:"online,omitempty"`
 
+	// SDP and ICE offers are concepts from WebRTC
+	SDPOffer *pkgconnreg.SDPOfferPayload `json:"sdp_offer,omitempty"`
+	ICEOffer *pkgconnreg.ICEOfferPayload `json:"ice_offer,omitempty"`
+
 	AttributesAnnouncement *pkgconnreg.AttributesAnnouncementPayload `json:"attributes_announcement,omitempty"`
 }

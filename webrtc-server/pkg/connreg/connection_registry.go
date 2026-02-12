@@ -30,6 +30,26 @@ type NodeGoesOnline struct {
 	NodeId string `json:"node_id"`
 }
 
+type OfferType string
+
+const (
+	OfferTypeOffer  OfferType = "offer"
+	OfferTypeAnswer OfferType = "answer"
+)
+
+type SDPOfferPayload struct {
+	Type       OfferType `json:"type"`
+	OfferJSON  string    `json:"offer_json"`
+	FromNodeId string    `json:"from_node_id"`
+	ToNodeId   string    `json:"to_node_id"`
+}
+
+type ICEOfferPayload struct {
+	OfferJSON  string `json:"offer_json"`
+	FromNodeId string `json:"from_node_id"`
+	ToNodeId   string `json:"to_node_id"`
+}
+
 type RenamePayload struct {
 	NewNodeName    string `json:"new_node_name"`
 	OriginNodeName string `json:"origin_node_name,omitempty"`
@@ -252,6 +272,24 @@ func (regData *ConnRegistryData) TestAgainstAttributes(expected ConnectionAttrib
 		}
 	}
 	return allMatch
+}
+
+func (cr *ConnRegistry) GetByNodeId(nodeId string) (data *ConnRegistryData, err error) {
+	err = cr.datastore.Walk(func(key string, value interface{}) (keepgoing bool, err error) {
+		entry, ok := value.(*ConnRegistryData)
+		if !ok {
+			return false, fmt.Errorf("failed to convert value to *ConnRegistryData")
+		}
+
+		keepgoing = key != nodeId
+		if !keepgoing {
+			data = cloneConnRegistryData(entry).(*ConnRegistryData)
+		}
+
+		return keepgoing, nil
+	})
+
+	return data, err
 }
 
 func (cr *ConnRegistry) SearchByAttributes(expected ConnectionAttributes) (data *ConnRegistryData, err error) {

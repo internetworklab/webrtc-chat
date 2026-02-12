@@ -32,7 +32,7 @@ func (handler *WebsocketHandler) sendBroadcastMsg(payload pkgframing.MessagePayl
 	for key, connent := range handler.cr.Dump() {
 		if wsConn := connent.WSConn; wsConn != nil {
 			log.Printf("Broadcasting message to %s", key)
-			if err := handler.sendMsg(wsConn, payload, key); err != nil {
+			if err := handler.sendMsg(wsConn, payload); err != nil {
 				return fmt.Errorf("failed to send response message to %s: %v", key, err)
 			}
 		}
@@ -40,17 +40,34 @@ func (handler *WebsocketHandler) sendBroadcastMsg(payload pkgframing.MessagePayl
 	return nil
 }
 
-func (handler *WebsocketHandler) sendMsg(conn *websocket.Conn, payload pkgframing.MessagePayload, key string) error {
+func (handler *WebsocketHandler) sendMsg(conn *websocket.Conn, payload pkgframing.MessagePayload) error {
 	responseJSON, err := json.Marshal(payload)
 	if err != nil {
-		return fmt.Errorf("failed to marshal response payload for %s: %v", key, err)
+		return fmt.Errorf("failed to marshal response payload: %v", err)
 	}
 
 	err = conn.WriteMessage(websocket.TextMessage, responseJSON)
 	if err != nil {
-		return fmt.Errorf("failed to write response message to %s: %v", key, err)
+		return fmt.Errorf("failed to write response message: %v", err)
 	}
 
+	return nil
+}
+
+func (handler *WebsocketHandler) sendMsgTo(nodeId string, payload pkgframing.MessagePayload) error {
+	nodeEntry, err := handler.cr.GetByNodeId(nodeId)
+
+	if err != nil {
+		return fmt.Errorf("failed to get node entry by node id: %v", err)
+	}
+
+	if nodeEntry != nil {
+		if wsConn := nodeEntry.WSConn; wsConn != nil {
+			if err := handler.sendMsg(wsConn, payload); err != nil {
+				return fmt.Errorf("failed to send SDP offer message to %s: %v", payload.SDPOffer.ToNodeId, err)
+			}
+		}
+	}
 	return nil
 }
 
@@ -87,7 +104,7 @@ func (handler *WebsocketHandler) handleTextMessage(key string, conn *websocket.C
 			Register: payload.Register,
 			NodeId:   key,
 		}
-		if err := handler.sendMsg(conn, responsePayload, key); err != nil {
+		if err := handler.sendMsg(conn, responsePayload); err != nil {
 			return fmt.Errorf("failed to send response message to %s: %v", key, err)
 		}
 	}
@@ -104,7 +121,7 @@ func (handler *WebsocketHandler) handleTextMessage(key string, conn *websocket.C
 				},
 				NodeId: key,
 			}
-			if err := handler.sendMsg(conn, responsePayload, key); err != nil {
+			if err := handler.sendMsg(conn, responsePayload); err != nil {
 				return fmt.Errorf("failed to send response message to %s: %v", key, err)
 			}
 
@@ -128,6 +145,17 @@ func (handler *WebsocketHandler) handleTextMessage(key string, conn *websocket.C
 			return fmt.Errorf("failed to send response message to %s: %v", key, err)
 		}
 	}
+	if payload.SDPOffer != nil {
+		if err := handler.sendMsgTo(payload.SDPOffer.ToNodeId, payload); err != nil {
+			return fmt.Errorf("failed to send SDP offer message to %s: %v", payload.SDPOffer.ToNodeId, err)
+		}
+	}
+	if payload.ICEOffer != nil {
+		if err := handler.sendMsgTo(payload.ICEOffer.ToNodeId, payload); err != nil {
+			return fmt.Errorf("failed to send ICE offer message to %s: %v", payload.ICEOffer.ToNodeId, err)
+		}
+	}
+
 	return nil
 }
 
