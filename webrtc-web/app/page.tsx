@@ -206,10 +206,55 @@ function useWs(setConnTrackStatus: Dispatch<SetStateAction<ConnTrackStatus>>) {
                 "[dbg] [onacceptor] ice connection state changed",
                 event,
               );
+              setConnTrackStatus((prev) => ({
+                ...prev,
+                [remoteNodeId]: {
+                  ...prev[remoteNodeId],
+                  connecting: false,
+                },
+              }));
+
+              if (
+                ent.peerConnection.iceConnectionState === "connected" ||
+                ent.peerConnection.iceConnectionState === "completed"
+              ) {
+                setConnTrackStatus((prev) => ({
+                  ...prev,
+                  [remoteNodeId]: {
+                    ...prev[remoteNodeId],
+                    disconnected: false,
+                  },
+                }));
+              }
+              if (ent.peerConnection.iceConnectionState === "checking") {
+                setConnTrackStatus((prev) => ({
+                  ...prev,
+                  [remoteNodeId]: {
+                    ...prev[remoteNodeId],
+                    connecting: true,
+                  },
+                }));
+              }
+              if (ent.peerConnection.iceConnectionState === "disconnected") {
+                setConnTrackStatus((prev) => ({
+                  ...prev,
+                  [remoteNodeId]: {
+                    ...prev[remoteNodeId],
+                    disconnected: true,
+                  },
+                }));
+              }
 
               if (ent.peerConnection.iceConnectionState === "failed") {
                 // see: https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API/Session_lifetime#ice_restart
                 // todo:  pc.setConfiguration(restartConfig);
+                setConnTrackStatus((prev) => ({
+                  ...prev,
+                  [remoteNodeId]: {
+                    ...prev[remoteNodeId],
+                    disconnected: true,
+                  },
+                }));
                 console.log(
                   "[dbg] [onacceptor] ice connection to peer",
                   remoteNodeId,
@@ -221,6 +266,13 @@ function useWs(setConnTrackStatus: Dispatch<SetStateAction<ConnTrackStatus>>) {
                     remoteNodeId,
                   );
                   ent.peerConnection.restartIce();
+                  setConnTrackStatus((prev) => ({
+                    ...prev,
+                    [remoteNodeId]: {
+                      ...prev[remoteNodeId],
+                      connecting: true,
+                    },
+                  }));
 
                   console.log(
                     "[dbg] [onacceptor] creating iceRestart offer for peer",
@@ -425,8 +477,9 @@ function WSPanel(props: { wsUrl: string }) {
 
   const [showChangeName, setShowChangeName] = useState(false);
 
-  // todo
+  // todo: display it in GUI
   const [connTrackStatus, setConnTrackStatus] = useState<ConnTrackStatus>({});
+  console.log("[dbg] connTrackStatus", connTrackStatus);
 
   const {
     rtt,
@@ -464,9 +517,53 @@ function WSPanel(props: { wsUrl: string }) {
       // registering event handlers for peerconnection handle
       ent.peerConnection.oniceconnectionstatechange = (event) => {
         console.log("[dbg] ice connection state changed", event);
+        setConnTrackStatus((prev) => ({
+          ...prev,
+          [remoteNodeId]: {
+            ...prev[remoteNodeId],
+            connecting: false,
+          },
+        }));
+        if (
+          ent.peerConnection.iceConnectionState === "connected" ||
+          ent.peerConnection.iceConnectionState === "completed"
+        ) {
+          setConnTrackStatus((prev) => ({
+            ...prev,
+            [remoteNodeId]: {
+              ...prev[remoteNodeId],
+              disconnected: false,
+            },
+          }));
+        }
+        if (ent.peerConnection.iceConnectionState === "checking") {
+          setConnTrackStatus((prev) => ({
+            ...prev,
+            [remoteNodeId]: {
+              ...prev[remoteNodeId],
+              connecting: true,
+            },
+          }));
+        }
+        if (ent.peerConnection.iceConnectionState === "disconnected") {
+          setConnTrackStatus((prev) => ({
+            ...prev,
+            [remoteNodeId]: {
+              ...prev[remoteNodeId],
+              disconnected: true,
+            },
+          }));
+        }
         if (ent.peerConnection.iceConnectionState === "failed") {
           // see: https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API/Session_lifetime#ice_restart
           // todo:  pc.setConfiguration(restartConfig);
+          setConnTrackStatus((prev) => ({
+            ...prev,
+            [remoteNodeId]: {
+              ...prev[remoteNodeId],
+              disconnected: true,
+            },
+          }));
           console.log(
             "[dbg] ice connection to peer",
             remoteNodeId,
@@ -475,6 +572,13 @@ function WSPanel(props: { wsUrl: string }) {
           setTimeout(() => {
             console.log("[dbg] restarting ICE for peer", remoteNodeId);
             ent.peerConnection.restartIce();
+            setConnTrackStatus((prev) => ({
+              ...prev,
+              [remoteNodeId]: {
+                ...prev[remoteNodeId],
+                connecting: true,
+              },
+            }));
 
             console.log(
               "[dbg] creating iceRestart offer for peer",
