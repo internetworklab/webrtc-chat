@@ -692,13 +692,17 @@ export default function Home() {
         <Box
           sx={{
             flex: 1,
+            minWidth: 0,
             display: "flex",
             flexDirection: "column",
-            justifyContent: "space-between",
+            overflow: "hidden",
           }}
         >
           <Box
             sx={{
+              flex: 1,
+              minHeight: 0,
+              overflow: "auto",
               display: "flex",
               flexDirection: "column",
               gap: 1,
@@ -709,8 +713,9 @@ export default function Home() {
               <RenderMessage message={message} key={message.messageId} />
             ))}
           </Box>
-          <MessageComposer
-            onMessage={(msgObject) => {
+          <Box sx={{ flexShrink: 0 }}>
+            <MessageComposer
+              onMessage={(msgObject) => {
               msgObject = {
                 ...msgObject,
                 fromNodeId: nodeIdRef.current,
@@ -720,7 +725,8 @@ export default function Home() {
                 JSON.stringify(msgObject),
               );
             }}
-          />
+            />
+          </Box>
         </Box>
       </Box>
       <ChangeNameDialog

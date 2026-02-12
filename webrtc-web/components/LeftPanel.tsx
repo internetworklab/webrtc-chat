@@ -18,7 +18,16 @@ export function LeftPanel(props: {
         flexShrink: 0,
       }}
     >
-      <Paper sx={{ height: "100%" }}>{children}</Paper>
+      <Paper
+        sx={{
+          height: "100%",
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+        }}
+      >
+        <Box sx={{ flex: 1, minHeight: 0, overflow: "auto" }}>{children}</Box>
+      </Paper>
       <Box
         onMouseDown={(e) => {
           const w0 = width;
