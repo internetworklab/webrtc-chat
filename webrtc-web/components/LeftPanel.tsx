@@ -10,7 +10,14 @@ export function LeftPanel(props: {
   const { initW = 420, children } = props;
   const [width, setWidth] = useState(initW);
   return (
-    <Box sx={{ width: `${width}px`, height: "100%", position: "relative" }}>
+    <Box
+      sx={{
+        width: `${width}px`,
+        height: "100%",
+        position: "relative",
+        flexShrink: 0,
+      }}
+    >
       <Paper sx={{ height: "100%" }}>{children}</Paper>
       <Box
         onMouseDown={(e) => {

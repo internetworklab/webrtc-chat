@@ -606,9 +606,37 @@ export default function Home() {
     }
   };
 
-  const [messageInput, setMessageInput] = useState<string>("");
-
-  const messages: ChatMessage[] = connTrackStatus[activeConn]?.messages ?? [];
+  const messages: ChatMessage[] = connTrackStatus[activeConn]?.messages ?? [
+    {
+      messageId: crypto.randomUUID(),
+      message: "test message1",
+      timestamp: 1770937509116,
+      fromNodeId: nodeIdRef.current,
+      toNodeId: activeConn,
+    },
+    {
+      messageId: crypto.randomUUID(),
+      message: "test message2",
+      timestamp: 1770937509116,
+      fromNodeId: nodeIdRef.current,
+      toNodeId: activeConn,
+    },
+    {
+      messageId: crypto.randomUUID(),
+      message: "test message3\nnewline\nnew line\nnew new    new new new line",
+      timestamp: 1770937509116,
+      fromNodeId: nodeIdRef.current,
+      toNodeId: activeConn,
+    },
+    {
+      messageId: crypto.randomUUID(),
+      message:
+        "test message4 long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long line \nnewline\nnew line\nnew new    new new new line",
+      timestamp: 1770937509116,
+      fromNodeId: nodeIdRef.current,
+      toNodeId: activeConn,
+    },
+  ];
 
   return (
     <Fragment>
@@ -674,6 +702,7 @@ export default function Home() {
               display: "flex",
               flexDirection: "column",
               gap: 1,
+              padding: 2,
             }}
           >
             {messages.map((message) => (

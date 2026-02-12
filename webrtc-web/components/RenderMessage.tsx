@@ -15,10 +15,12 @@ export function RenderMessage(props: { message: ChatMessage }) {
         flexWrap: "wrap",
         justifyContent: "space-between",
         alignItems: "center",
+
+        maxWidth: "100%",
       }}
     >
-      <Box>
-        <Box>Message: {message.message}</Box>
+      <Box sx={{ whiteSpace: "pre-wrap", width: "max-content" }}>
+        Message: {message.message}
       </Box>
     </Card>
   );
