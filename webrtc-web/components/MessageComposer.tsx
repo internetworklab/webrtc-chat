@@ -34,8 +34,12 @@ export function MessageComposer(props: {
   onMessage: (message: ChatMessage) => void;
 }) {
   const [messageInput, setMessageInput] = useState<string>("");
+
   const doSend = () => {
     const msgTxt = messageInput;
+    if (msgTxt.trim() === "") {
+      return;
+    }
 
     const msgObject: ChatMessage = {
       messageId: crypto.randomUUID(),
