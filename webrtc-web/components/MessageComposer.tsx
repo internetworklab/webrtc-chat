@@ -4,6 +4,7 @@ import { ChatMessage } from "@/apis/types";
 import { Box, IconButton, Input, Tooltip } from "@mui/material";
 import { useState } from "react";
 import SendIcon from "@mui/icons-material/Send";
+import AttachFileIcon from "@mui/icons-material/AttachFile";
 
 export function MessageComposer(props: {
   onMessage: (message: ChatMessage) => void;
@@ -60,7 +61,17 @@ export function MessageComposer(props: {
         paddingRight: 1,
       }}
     >
+      <Tooltip title={"Attachment"}>
+        <IconButton
+          onClick={() => {
+            alert("todo");
+          }}
+        >
+          <AttachFileIcon sx={{ transform: "rotate(30deg)" }} />
+        </IconButton>
+      </Tooltip>
       <Input
+        sx={{ paddingLeft: 1, paddingBottom: 1 }}
         fullWidth
         multiline
         maxRows={8}
