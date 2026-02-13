@@ -141,6 +141,21 @@ export interface ICEOfferPayload {
 
 export type ChatMessageImage = {
   url: string;
+  // mime type
+  type?: string;
+};
+
+export type ChatMessageVideo = {
+  url: string;
+  // mime type
+  type?: string;
+};
+
+export type ChatMessageFile = {
+  url: string;
+  name: string;
+  size?: number;
+  type?: string;
 };
 
 export type ChatMessage = {
@@ -149,6 +164,8 @@ export type ChatMessage = {
   fromNodeId?: string;
   toNodeId?: string;
   image?: ChatMessageImage;
+  video?: ChatMessageVideo;
+  file?: ChatMessageFile;
   message: string;
   messageMIME?: string;
   timestamp: number;

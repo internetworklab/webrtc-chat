@@ -649,6 +649,18 @@ export default function Home() {
         url: "/BingWallpaper.jpg",
       },
     },
+    {
+      messageId: crypto.randomUUID(),
+      message: "",
+      timestamp: 1770937509116,
+      fromNodeId: nodeIdRef.current,
+      toNodeId: activeConn,
+      file: {
+        url: "/ping-demo.mp4",
+        name: "ping-demo.mp4",
+        type: "video/mp4",
+      },
+    },
   ];
 
   return (
