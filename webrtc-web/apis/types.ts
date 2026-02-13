@@ -119,6 +119,7 @@ export type ConnEntry = {
   node_id: string;
   registered_at: number;
   entry: ConnRegistryData;
+  rtt?: number;
 };
 
 export enum OfferType {
@@ -162,6 +163,20 @@ export type ChatMessageFile = {
   size?: number;
   type?: string;
   loading?: ChatMessageFileLoading;
+
+  // the identifier of the DC that actually transmit the file data,
+  // file senders sends this to the file receiver in advance before it creates the file transfer DC.
+  dcId?: string;
+};
+
+export enum ChatMessagePingDirection {
+  Ping = "ping",
+  Pong = "pong",
+}
+
+export type ChatMessagePing = {
+  direction: ChatMessagePingDirection;
+  seq: number;
 };
 
 export type ChatMessage = {
@@ -172,6 +187,7 @@ export type ChatMessage = {
   image?: ChatMessageImage;
   video?: ChatMessageVideo;
   file?: ChatMessageFile;
+  ping?: ChatMessagePing;
   message: string;
   messageMIME?: string;
   timestamp: number;
@@ -182,14 +198,35 @@ export type ConnTrackStatusEntry = {
   disconnected?: boolean;
   connecting?: boolean;
   messages?: ChatMessage[];
+  rtt?: number;
 };
 
 // key is the node_id of remote peer
 export type ConnTrackStatus = Record<string, ConnTrackStatusEntry>;
 
+export enum PredefinedDCLabel {
+  Chat = "chat",
+  File = "file",
+  Ping = "ping",
+  // todo: ping, image, video, etc.
+}
+
+export type PingStateRef = {
+  seq: number;
+  timer?: NodeJS.Timeout;
+  txMap: Record<number, number>;
+};
+
 export type ConnTrackEntry = {
   peerConnection: RTCPeerConnection;
   remoteOffers: RTCSessionDescriptionInit[];
   queuedICEOffers: RTCIceCandidateInit[];
+
+  // this is the chat DC
   dataChannel?: RTCDataChannel | null;
+
+  // key is the value of RTCDataChannel.id, all file DCs shared label PredefinedDCLabel.File
+  fileDataChannels?: Record<string, RTCDataChannel>;
+
+  pingSeqRef?: PingStateRef;
 };

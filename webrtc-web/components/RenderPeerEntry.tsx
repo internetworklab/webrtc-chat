@@ -7,26 +7,34 @@ export function RenderPeerEntry(props: {
   conn: ConnEntry;
   activeNodeId: string;
   onSelect: () => void;
+  rtt?: number;
 }) {
-  const { conn, activeNodeId, onSelect } = props;
+  const { conn, activeNodeId, onSelect, rtt } = props;
   return (
     <MenuItem
       selected={activeNodeId === conn.node_id}
       onClick={() => {
         onSelect();
       }}
-      sx={{ overflow: "hidden" }}
+      sx={{
+        overflow: "hidden",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+      }}
     >
       {conn.entry?.node_name || conn.node_id}
-      <Typography
-        component="span"
-        variant="body2"
-        gutterBottom={false}
-        marginLeft={1}
-        noWrap
-      >
-        {conn.node_id}
-      </Typography>
+      {rtt !== undefined && (
+        <Typography
+          component="span"
+          variant="body2"
+          gutterBottom={false}
+          marginLeft={1}
+          noWrap
+        >
+          {rtt.toFixed(2).replace(/\.?0+$/, "")}ms
+        </Typography>
+      )}
     </MenuItem>
   );
 }
