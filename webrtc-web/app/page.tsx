@@ -638,7 +638,18 @@ export default function Home() {
     }
   };
 
-  const messages: ChatMessage[] = connTrackStatus[activeConn]?.messages ?? [];
+  const messages: ChatMessage[] = connTrackStatus[activeConn]?.messages ?? [
+    {
+      messageId: crypto.randomUUID(),
+      message: "test message1",
+      timestamp: 1770937509116,
+      fromNodeId: nodeIdRef.current,
+      toNodeId: activeConn,
+      image: {
+        url: "/BingWallpaper.jpg",
+      },
+    },
+  ];
 
   return (
     <Fragment>

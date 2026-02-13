@@ -139,11 +139,16 @@ export interface ICEOfferPayload {
   to_node_id: string;
 }
 
+export type ChatMessageImage = {
+  url: string;
+};
+
 export type ChatMessage = {
   // message uuid, globally unique, to prevent a message from being queued multiple times.
   messageId: string;
   fromNodeId?: string;
   toNodeId?: string;
+  image?: ChatMessageImage;
   message: string;
   messageMIME?: string;
   timestamp: number;
