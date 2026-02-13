@@ -664,6 +664,33 @@ export default function Home() {
         },
       },
     },
+    {
+      messageId: crypto.randomUUID(),
+      message: "",
+      timestamp: 1770937509116,
+      fromNodeId: nodeIdRef.current,
+      toNodeId: activeConn,
+      file: {
+        url: "/ping-demo1.mp4",
+        name: "ping-demo1.mp4",
+        type: "video/mp4",
+        loading: {
+          progress: 0.66,
+        },
+      },
+    },
+    {
+      messageId: crypto.randomUUID(),
+      message: "",
+      timestamp: 1770937509116,
+      fromNodeId: nodeIdRef.current,
+      toNodeId: activeConn,
+      file: {
+        url: "/ping-demo2.mp4",
+        name: "ping-demo2.mp4",
+        type: "video/mp4",
+      },
+    },
   ];
 
   return (

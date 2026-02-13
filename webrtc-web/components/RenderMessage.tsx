@@ -24,16 +24,18 @@ export function RenderMessage(props: { message: ChatMessage }) {
           position: "relative",
         }}
       >
-        <Box
-          sx={{
-            position: "absolute",
-            top: 0,
-            right: 0,
-            width: "40%",
-            height: "100%",
-            backgroundColor: "rgba(0, 0, 0, 0.5)",
-          }}
-        ></Box>
+        {message.file?.loading && (
+          <Box
+            sx={{
+              position: "absolute",
+              top: 0,
+              right: 0,
+              width: `${(1 - message.file.loading.progress) * 100}%`,
+              height: "100%",
+              backgroundColor: "rgba(0, 0, 0, 0.5)",
+            }}
+          ></Box>
+        )}
         {message.image && (
           <img
             style={{ maxHeight: "240px" }}
