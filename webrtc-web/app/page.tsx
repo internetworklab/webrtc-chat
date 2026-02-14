@@ -527,12 +527,14 @@ function closeDCById(
   };
 }
 
-function isLittleEndian() {
+function checkIsLittleEndian() {
   const test = new Uint32Array(1);
   test[0] = 1;
   const bytesArray = new Uint8Array(test.buffer);
   return bytesArray[0] === 1;
 }
+
+const isLittleEndian = checkIsLittleEndian();
 
 function sendFeedBackToDC(
   dc: RTCDataChannel,
@@ -546,7 +548,7 @@ function sendFeedBackToDC(
   feedBackPayload[0] = chunkSize; // to ack that 0-byte of data has been received
   let ab = feedBackPayload.buffer;
   let u8s = new Uint8Array(ab);
-  if (isLittleEndian()) {
+  if (isLittleEndian) {
     u8s.reverse();
   }
 
@@ -840,30 +842,41 @@ function attachPeerConnectionEventListeners(
   };
 }
 
-function newUint32StreamParser(binaryType: BinaryType) {
+// parse a network stream in network byte order (big endian) into a stream of 32-bit words
+function newUint32StreamParser(isLittleEndian: boolean) {
   let feedBackParseRef: {
     chunks: any[];
     totalSize: number;
-    binaryType: BinaryType;
   } = {
     chunks: [],
     totalSize: 0,
-    binaryType: binaryType,
   };
 
   const doConsume = (dataCb: (word: number) => void) => {
     if (feedBackParseRef.totalSize >= wordSize) {
       const mergedChunk = new Blob(feedBackParseRef.chunks);
       const rest = feedBackParseRef.totalSize % wordSize;
+      feedBackParseRef.totalSize = 0;
+      feedBackParseRef.chunks = [];
       if (rest > 0) {
         const restChunk = mergedChunk.slice(mergedChunk.size - rest);
         feedBackParseRef.chunks.push(restChunk);
+        feedBackParseRef.totalSize += restChunk.size;
       }
       const wordsChunk = mergedChunk.slice(0, mergedChunk.size - rest);
       wordsChunk.arrayBuffer().then((ab) => {
-        const wordsArray = new Uint32Array(ab);
-        for (let i = 0; i < wordsArray.length; i++) {
-          const word = wordsArray[i];
+        const u8sArray = new Uint8Array(ab);
+        for (let i = 0; i < u8sArray.length; i = i + wordSize) {
+          const wordU8s = new Uint8Array([
+            u8sArray[i],
+            u8sArray[i + 1],
+            u8sArray[i + 2],
+            u8sArray[i + 3],
+          ]);
+          if (isLittleEndian) {
+            wordU8s.reverse();
+          }
+          const word = new Uint32Array(wordU8s.buffer)[0];
           dataCb(word);
         }
       });
@@ -880,8 +893,8 @@ function newUint32StreamParser(binaryType: BinaryType) {
         feedBackParseRef.totalSize += chunkSize;
       } else {
         console.error(
-          "[dbg] [uint32streamparser] unknown binary type",
-          feedBackParseRef.binaryType,
+          "[dbg] [uint32streamparser] chunk has unknown binary type",
+          chunk,
         );
       }
       doConsume((word) => {
@@ -1264,9 +1277,8 @@ export default function Home() {
                           );
                         });
 
-                        const feedbackWordStream = newUint32StreamParser(
-                          fileDC.binaryType,
-                        );
+                        const feedbackWordStream =
+                          newUint32StreamParser(isLittleEndian);
                         const fbWriter =
                           feedbackWordStream.writable.getWriter();
                         const fbReader =
