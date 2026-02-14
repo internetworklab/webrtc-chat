@@ -906,9 +906,18 @@ export default function Home() {
           </Box>
           <Box sx={{ flexShrink: 0 }}>
             <MessageComposer
-              onMessage={(msgObject) => {
-                msgObject = {
-                  ...msgObject,
+              onFile={(filelist) => {
+                console.log(`[dbg] onFile`, filelist);
+              }}
+              onPhoto={(photo) => {
+                console.log(`[dbg] onPhoto`, photo);
+              }}
+              onText={(text) => {
+                const msgObject: ChatMessage = {
+                  messageId: crypto.randomUUID(),
+                  message: text,
+                  messageMIME: "text/plain",
+                  timestamp: Date.now(),
                   fromNodeId: nodeIdRef.current,
                   toNodeId: activeConn,
                 };

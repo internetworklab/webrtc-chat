@@ -1,6 +1,5 @@
 "use client";
 
-import { ChatMessage } from "@/apis/types";
 import {
   Box,
   IconButton,
@@ -13,11 +12,12 @@ import {
   styled,
   Paper,
 } from "@mui/material";
-import { Fragment, useState } from "react";
+import { useState } from "react";
 import SendIcon from "@mui/icons-material/Send";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import { MouseEvent } from "react";
 import { InsertDriveFile, InsertPhoto } from "@mui/icons-material";
+import { useId } from "react";
 
 const VisuallyHiddenInput = styled("input")({
   clip: "rect(0 0 0 0)",
@@ -32,8 +32,11 @@ const VisuallyHiddenInput = styled("input")({
 });
 
 export function MessageComposer(props: {
-  onMessage: (message: ChatMessage) => void;
+  onText?: (text: string) => void;
+  onFile?: (file: FileList) => void;
+  onPhoto?: (photo: File) => void;
 }) {
+  const { onFile, onPhoto } = props;
   const [messageInput, setMessageInput] = useState<string>("");
 
   const doSend = () => {
@@ -42,16 +45,7 @@ export function MessageComposer(props: {
       return;
     }
 
-    const msgObject: ChatMessage = {
-      messageId: crypto.randomUUID(),
-      fromNodeId: "",
-      toNodeId: "",
-      message: msgTxt,
-      timestamp: Date.now(),
-    };
-
-    props.onMessage(msgObject);
-
+    props.onText?.(msgTxt);
     setMessageInput("");
   };
 
@@ -85,6 +79,10 @@ export function MessageComposer(props: {
   const handleClose = () => {
     setAnchorEl(null);
   };
+
+  const fileInputId = useId();
+  const photoInputId = useId();
+
   return (
     <Paper sx={{ borderRadius: 0 }}>
       <Box
@@ -138,21 +136,49 @@ export function MessageComposer(props: {
         open={open}
         onClose={handleClose}
       >
-        <MenuItem component="label" onClick={handleClose}>
+        <MenuItem
+          component="label"
+          role={undefined}
+          htmlFor={fileInputId}
+          onClick={handleClose}
+        >
           <ListItemIcon>
             <InsertDriveFile fontSize="small" />
           </ListItemIcon>
           <ListItemText>File</ListItemText>
-          <VisuallyHiddenInput type="file" />
         </MenuItem>
-        <MenuItem component="label" onClick={handleClose}>
+        <MenuItem
+          component="label"
+          role={undefined}
+          onClick={handleClose}
+          htmlFor={photoInputId}
+        >
           <ListItemIcon>
             <InsertPhoto fontSize="small" />
           </ListItemIcon>
           <ListItemText>Photo or Video</ListItemText>
-          <VisuallyHiddenInput type="file" />
         </MenuItem>
       </Menu>
+      <VisuallyHiddenInput
+        id={fileInputId}
+        type="file"
+        onChange={(ev) => {
+          if (ev.target.files && ev.target.files.length > 0) {
+            onFile?.(ev.target.files);
+          }
+        }}
+        multiple
+      />
+      <VisuallyHiddenInput
+        id={photoInputId}
+        type="file"
+        onChange={(ev) => {
+          if (ev.target.files && ev.target.files.length > 0) {
+            onPhoto?.(ev.target.files[0]);
+          }
+        }}
+        multiple
+      />
     </Paper>
   );
 }
