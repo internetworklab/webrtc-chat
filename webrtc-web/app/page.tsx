@@ -527,14 +527,72 @@ function closeDCById(
   };
 }
 
-function checkIsLittleEndian() {
-  const test = new Uint32Array(1);
-  test[0] = 1;
-  const bytesArray = new Uint8Array(test.buffer);
-  return bytesArray[0] === 1;
-}
+// parse a network stream in network byte order (big endian) into a stream of 32-bit words
+function newUint32StreamParser() {
+  let feedBackParseRef: {
+    chunks: any[];
+    totalSize: number;
+  } = {
+    chunks: [],
+    totalSize: 0,
+  };
 
-const isLittleEndian = checkIsLittleEndian();
+  const doConsume = async () => {
+    if (feedBackParseRef.totalSize >= wordSize) {
+      const mergedChunk = new Blob(feedBackParseRef.chunks);
+      const rest = feedBackParseRef.totalSize % wordSize;
+      feedBackParseRef.totalSize = 0;
+      feedBackParseRef.chunks = [];
+      if (rest > 0) {
+        const restChunk = mergedChunk.slice(mergedChunk.size - rest);
+        feedBackParseRef.chunks.push(restChunk);
+        feedBackParseRef.totalSize += restChunk.size;
+      }
+      const wordsChunk = mergedChunk.slice(0, mergedChunk.size - rest);
+      const resultWords: number[] = [];
+      try {
+        const ab = await wordsChunk.arrayBuffer();
+        const dv = new DataView(ab);
+
+        for (let i = 0; i < ab.byteLength; i = i + wordSize) {
+          // ab is data from network stream (so it's big endian)
+          const word = dv.getUint32(i, false);
+          resultWords.push(word);
+        }
+        return resultWords;
+      } catch (e) {
+        console.error("failed to get arraybuffer from blob", e);
+      }
+    }
+  };
+  return new TransformStream({
+    async transform(chunk, controller) {
+      feedBackParseRef.chunks.push(chunk);
+      if (chunk instanceof ArrayBuffer) {
+        const chunkSize = (chunk as ArrayBuffer).byteLength;
+        feedBackParseRef.totalSize += chunkSize;
+      } else if (chunk instanceof Blob) {
+        const chunkSize = (chunk as Blob).size;
+        feedBackParseRef.totalSize += chunkSize;
+      } else {
+        console.error(
+          "[dbg] [uint32streamparser] chunk has unknown binary type",
+          chunk,
+        );
+      }
+      const resultWords = await doConsume();
+      for (const word of resultWords ?? []) {
+        controller.enqueue(word);
+      }
+    },
+    async flush(controller) {
+      const resultWords = await doConsume();
+      for (const word of resultWords ?? []) {
+        controller.enqueue(word);
+      }
+    },
+  });
+}
 
 function sendFeedBackToDC(
   dc: RTCDataChannel,
@@ -544,23 +602,9 @@ function sendFeedBackToDC(
   if (typeof chunkSize !== "number") {
     console.error(`[dbg]${logSource} chunk size is not a number`, chunkSize);
   }
-  const feedBackPayload = new Uint32Array(1);
-  feedBackPayload[0] = chunkSize; // to ack that 0-byte of data has been received
-  let ab = feedBackPayload.buffer;
-  let u8s = new Uint8Array(ab);
-  if (isLittleEndian) {
-    u8s.reverse();
-  }
-
-  // every time we send back the size of the chunk that just received, not the cumulative size of the data that has been received.
-  // so the order doesn't matter: say two ack message arrives like [0, y] or [y, 0], both yields a cumulative size of y = 0 + y in the sender's side.
-  if (dc.binaryType === "blob") {
-    dc.send(new Blob([u8s.buffer]));
-  } else if (dc.binaryType === "arraybuffer") {
-    dc.send(u8s.buffer);
-  } else {
-    console.error(`[dbg]${logSource} unknown binary type`, dc.binaryType);
-  }
+  const ab = new ArrayBuffer(wordSize);
+  new DataView(ab).setUint32(0, chunkSize, false);
+  dc.send(ab);
 }
 
 function createFileTransferStatusEntry(
@@ -840,73 +884,6 @@ function attachPeerConnectionEventListeners(
       console.log(`[dbg]${logSource} End of ICE candidate gathering.`);
     }
   };
-}
-
-// parse a network stream in network byte order (big endian) into a stream of 32-bit words
-function newUint32StreamParser(isLittleEndian: boolean) {
-  let feedBackParseRef: {
-    chunks: any[];
-    totalSize: number;
-  } = {
-    chunks: [],
-    totalSize: 0,
-  };
-
-  const doConsume = (dataCb: (word: number) => void) => {
-    if (feedBackParseRef.totalSize >= wordSize) {
-      const mergedChunk = new Blob(feedBackParseRef.chunks);
-      const rest = feedBackParseRef.totalSize % wordSize;
-      feedBackParseRef.totalSize = 0;
-      feedBackParseRef.chunks = [];
-      if (rest > 0) {
-        const restChunk = mergedChunk.slice(mergedChunk.size - rest);
-        feedBackParseRef.chunks.push(restChunk);
-        feedBackParseRef.totalSize += restChunk.size;
-      }
-      const wordsChunk = mergedChunk.slice(0, mergedChunk.size - rest);
-      wordsChunk.arrayBuffer().then((ab) => {
-        const u8sArray = new Uint8Array(ab);
-        for (let i = 0; i < u8sArray.length; i = i + wordSize) {
-          const wordU8s = new Uint8Array([
-            u8sArray[i],
-            u8sArray[i + 1],
-            u8sArray[i + 2],
-            u8sArray[i + 3],
-          ]);
-          if (isLittleEndian) {
-            wordU8s.reverse();
-          }
-          const word = new Uint32Array(wordU8s.buffer)[0];
-          dataCb(word);
-        }
-      });
-    }
-  };
-  return new TransformStream({
-    transform(chunk, controller) {
-      feedBackParseRef.chunks.push(chunk);
-      if (chunk instanceof ArrayBuffer) {
-        const chunkSize = (chunk as ArrayBuffer).byteLength;
-        feedBackParseRef.totalSize += chunkSize;
-      } else if (chunk instanceof Blob) {
-        const chunkSize = (chunk as Blob).size;
-        feedBackParseRef.totalSize += chunkSize;
-      } else {
-        console.error(
-          "[dbg] [uint32streamparser] chunk has unknown binary type",
-          chunk,
-        );
-      }
-      doConsume((word) => {
-        controller.enqueue(word);
-      });
-    },
-    flush(controller) {
-      doConsume((word) => {
-        controller.enqueue(word);
-      });
-    },
-  });
 }
 
 export default function Home() {
@@ -1277,8 +1254,7 @@ export default function Home() {
                           );
                         });
 
-                        const feedbackWordStream =
-                          newUint32StreamParser(isLittleEndian);
+                        const feedbackWordStream = newUint32StreamParser();
                         const fbWriter =
                           feedbackWordStream.writable.getWriter();
                         const fbReader =
