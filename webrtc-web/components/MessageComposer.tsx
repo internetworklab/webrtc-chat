@@ -34,7 +34,7 @@ const VisuallyHiddenInput = styled("input")({
 export function MessageComposer(props: {
   onText?: (text: string) => void;
   onFile?: (file: FileList) => void;
-  onPhoto?: (photo: File) => void;
+  onPhoto?: (photo: FileList) => void;
 }) {
   const { onFile, onPhoto } = props;
   const [messageInput, setMessageInput] = useState<string>("");
@@ -174,7 +174,7 @@ export function MessageComposer(props: {
         type="file"
         onChange={(ev) => {
           if (ev.target.files && ev.target.files.length > 0) {
-            onPhoto?.(ev.target.files[0]);
+            onPhoto?.(ev.target.files);
           }
         }}
         multiple

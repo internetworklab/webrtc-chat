@@ -140,26 +140,20 @@ export interface ICEOfferPayload {
   to_node_id: string;
 }
 
-export type ChatMessageImage = {
-  url: string;
-  // mime type
-  type?: string;
-};
-
-export type ChatMessageVideo = {
-  url: string;
-  // mime type
-  type?: string;
-};
-
 export type ChatMessageFileLoading = {
-  // real number in [0, 1]
+  // real number in [0, 1], is the ratio of the actual receiver acknowledged bytes to the total bytes of the file
   progress: number;
+
+  // onopen event of DC will trigger this to be true
+  started?: boolean;
+
+  // this will be set to true when all octets of the file are acknowledged by the receiver
+  completed?: boolean;
 };
 
 export type ChatMessageFile = {
-  url: string;
-  name: string;
+  url?: string;
+  name?: string;
   size?: number;
   type?: string;
   loading?: ChatMessageFileLoading;
@@ -179,15 +173,23 @@ export type ChatMessagePing = {
   seq: number;
 };
 
+export type ChatMessageAmend = {
+  messageId: string;
+
+  // this should be the output of JSON.stringify(newMessageObject) where newMessageObject is an object of type ChatMessage
+  newMessageJSON: string;
+};
+
 export type ChatMessage = {
   // message uuid, globally unique, to prevent a message from being queued multiple times.
   messageId: string;
-  fromNodeId?: string;
-  toNodeId?: string;
-  image?: ChatMessageImage;
-  video?: ChatMessageVideo;
+  fromNodeId: string;
+  toNodeId: string;
+  image?: ChatMessageFile;
+  video?: ChatMessageFile;
   file?: ChatMessageFile;
   ping?: ChatMessagePing;
+  amend?: ChatMessageAmend;
   message: string;
   messageMIME?: string;
   timestamp: number;

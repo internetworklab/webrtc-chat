@@ -2,6 +2,7 @@
 
 import {
   ChatMessage,
+  ChatMessageFile,
   ChatMessagePing,
   ChatMessagePingDirection,
   ConnEntry,
@@ -392,21 +393,31 @@ function attachDCEventListeners(
       console.log(`[dbg]${logSource} DCID of chat data channel`, dc.id);
       try {
         const msgObject: ChatMessage = JSON.parse(event.data);
+        let amendedMsgObject: ChatMessage | undefined;
+        let amendedMsgId: string | undefined;
+        if (msgObject.amend) {
+          amendedMsgObject = JSON.parse(msgObject.amend.newMessageJSON);
+          amendedMsgId = msgObject.amend.messageId;
+        }
+
         setConnTrackStatus((prev) => {
           const theEntry = prev[remoteNodeId] ? { ...prev[remoteNodeId] } : {};
           const messages = theEntry.messages ? [...theEntry.messages] : [];
-          const idx = messages.findIndex(
-            (msg) => msg.messageId === msgObject.messageId,
-          );
-          if (idx === -1) {
-            messages.push(msgObject);
-          } else {
-            console.log(
-              `[dbg]${logSource}`,
-              "message",
-              msgObject,
-              "is already in the queue, skipping",
+
+          if (amendedMsgObject && amendedMsgId) {
+            const idx = messages.findIndex(
+              (msgObj) => msgObj.messageId === amendedMsgId,
             );
+            if (idx !== -1) {
+              messages[idx] = amendedMsgObject;
+            }
+          } else {
+            const idx = messages.findIndex(
+              (msg) => msg.messageId === msgObject.messageId,
+            );
+            if (idx === -1) {
+              messages.push(msgObject);
+            }
           }
           theEntry.messages = messages;
           return {
@@ -773,60 +784,39 @@ export default function Home() {
     }
   };
 
-  const messages: ChatMessage[] = connTrackStatus[activeConn]?.messages ?? [
-    {
-      messageId: crypto.randomUUID(),
-      message: "test message1",
-      timestamp: 1770937509116,
-      fromNodeId: nodeIdRef.current,
-      toNodeId: activeConn,
-      image: {
-        url: "/BingWallpaper.jpg",
+  const messages: ChatMessage[] = connTrackStatus[activeConn]?.messages ?? [];
+
+  const sendMsg = (msgObject: ChatMessage) => {
+    connTrackRef.current[activeConn]?.dataChannel?.send(
+      JSON.stringify(msgObject),
+    );
+    setConnTrackStatus((prev) => ({
+      ...prev,
+      [activeConn]: {
+        ...prev[activeConn],
+        messages: [...(prev[activeConn]?.messages ?? []), msgObject],
       },
-    },
-    {
-      messageId: crypto.randomUUID(),
-      message: "",
-      timestamp: 1770937509116,
+    }));
+  };
+
+  const sendAmendMsg = (amendMsgObject: ChatMessage) => {
+    const msgToSend: ChatMessage = {
+      timestamp: Date.now(),
       fromNodeId: nodeIdRef.current,
-      toNodeId: activeConn,
-      file: {
-        url: "/ping-demo.mp4",
-        name: "ping-demo.mp4",
-        type: "video/mp4",
-        loading: {
-          progress: 0.4,
-        },
-      },
-    },
-    {
+      toNodeId: amendMsgObject.toNodeId,
       messageId: crypto.randomUUID(),
       message: "",
-      timestamp: 1770937509116,
-      fromNodeId: nodeIdRef.current,
-      toNodeId: activeConn,
-      file: {
-        url: "/ping-demo1.mp4",
-        name: "ping-demo1.mp4",
-        type: "video/mp4",
-        loading: {
-          progress: 0.66,
-        },
+      messageMIME: "application/json",
+      amend: {
+        messageId: amendMsgObject.messageId,
+        newMessageJSON: JSON.stringify(amendMsgObject),
       },
-    },
-    {
-      messageId: crypto.randomUUID(),
-      message: "",
-      timestamp: 1770937509116,
-      fromNodeId: nodeIdRef.current,
-      toNodeId: activeConn,
-      file: {
-        url: "/ping-demo2.mp4",
-        name: "ping-demo2.mp4",
-        type: "video/mp4",
-      },
-    },
-  ];
+    };
+    const dc = connTrackRef.current[amendMsgObject.toNodeId]?.dataChannel;
+    if (dc) {
+      dc.send(JSON.stringify(msgToSend));
+    }
+  };
 
   return (
     <Fragment>
@@ -907,10 +897,81 @@ export default function Home() {
           <Box sx={{ flexShrink: 0 }}>
             <MessageComposer
               onFile={(filelist) => {
-                console.log(`[dbg] onFile`, filelist);
+                if (filelist && filelist.length > 0) {
+                  for (const file of filelist) {
+                    const msgObject: ChatMessage = {
+                      messageId: crypto.randomUUID(),
+                      message: "",
+                      messageMIME: "application/octet-stream",
+                      timestamp: Date.now(),
+                      fromNodeId: nodeIdRef.current,
+                      toNodeId: activeConn,
+                      file: {
+                        url: "",
+                        name: file.name,
+                        type: file.type,
+                        size: file.size,
+                        loading: {
+                          progress: 0,
+                        },
+                      },
+                    };
+                    const pc = connTrackRef.current[activeConn]?.peerConnection;
+                    sendMsg(msgObject);
+                    const fileDC = pc?.createDataChannel(
+                      PredefinedDCLabel.File,
+                    );
+                    if (fileDC) {
+                      fileDC.onopen = () => {
+                        const amendedMsgObject: ChatMessage = {
+                          ...msgObject,
+                          file: {
+                            ...(msgObject.file ?? {}),
+                            dcId: fileDC.id?.toString() || "",
+                          },
+                        };
+                        sendAmendMsg(amendedMsgObject);
+                        if (!amendedMsgObject.file?.dcId) {
+                          console.error(
+                            "failed to update the dcId field of the ChatMessageFile object",
+                            amendedMsgObject,
+                          );
+                        }
+                      };
+                    }
+                  }
+                }
               }}
-              onPhoto={(photo) => {
-                console.log(`[dbg] onPhoto`, photo);
+              onPhoto={(filelist) => {
+                if (filelist && filelist.length > 0) {
+                  for (const file of filelist) {
+                    const msgObject: ChatMessage = {
+                      messageId: crypto.randomUUID(),
+                      message: "",
+                      messageMIME: "application/octet-stream",
+                      timestamp: Date.now(),
+                      fromNodeId: nodeIdRef.current,
+                      toNodeId: activeConn,
+                    };
+                    const filePayload: ChatMessageFile = {
+                      url: "",
+                      name: file.name,
+                      type: file.type,
+                      size: file.size,
+                      loading: {
+                        progress: 0,
+                      },
+                    };
+                    if (file.type.startsWith("image/")) {
+                      msgObject.image = filePayload;
+                    } else if (file.type.startsWith("video/")) {
+                      msgObject.video = filePayload;
+                    } else {
+                      msgObject.file = filePayload;
+                    }
+                    sendMsg(msgObject);
+                  }
+                }
               }}
               onText={(text) => {
                 const msgObject: ChatMessage = {
@@ -921,19 +982,16 @@ export default function Home() {
                   fromNodeId: nodeIdRef.current,
                   toNodeId: activeConn,
                 };
-                connTrackRef.current[activeConn]?.dataChannel?.send(
-                  JSON.stringify(msgObject),
-                );
-                setConnTrackStatus((prev) => ({
-                  ...prev,
-                  [activeConn]: {
-                    ...prev[activeConn],
-                    messages: [
-                      ...(prev[activeConn]?.messages ?? []),
-                      msgObject,
-                    ],
-                  },
-                }));
+                sendMsg(msgObject);
+                if (text.startsWith("test-amend")) {
+                  const amendedMsgObject: ChatMessage = {
+                    ...msgObject,
+                    message: text + ":" + "amended message",
+                  };
+                  setTimeout(() => {
+                    sendAmendMsg(amendedMsgObject);
+                  }, 5000);
+                }
               }}
             />
           </Box>
