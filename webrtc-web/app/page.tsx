@@ -369,6 +369,48 @@ function useWs(setConnTrackStatus: Dispatch<SetStateAction<ConnTrackStatus>>) {
   };
 }
 
+function updateConnTrackStatusByMsgObject(
+  prev: ConnTrackStatus,
+  remoteNodeId: string,
+  msgObject: ChatMessage,
+) {
+  let amendedMsgObject: ChatMessage | undefined;
+  let amendedMsgId: string | undefined;
+  if (msgObject.amend) {
+    amendedMsgObject = JSON.parse(msgObject.amend.newMessageJSON);
+    amendedMsgId = msgObject.amend.messageId;
+  }
+
+  const theEntry = prev[remoteNodeId] ? { ...prev[remoteNodeId] } : {};
+  let messages = theEntry.messages ? [...theEntry.messages] : [];
+
+  if (amendedMsgObject && amendedMsgId) {
+    const idx = messages.findIndex(
+      (msgObj) => msgObj.messageId === amendedMsgId,
+    );
+    if (idx !== -1) {
+      messages[idx] = amendedMsgObject;
+    }
+  } else if (msgObject.delete && msgObject.delete.messageId) {
+    messages = messages.filter(
+      (msgObj) => msgObj.messageId !== msgObject.delete!.messageId,
+    );
+  } else {
+    const idx = messages.findIndex(
+      (msg) => msg.messageId === msgObject.messageId,
+    );
+    if (idx === -1) {
+      messages.push(msgObject);
+    }
+  }
+
+  theEntry.messages = messages;
+  return {
+    ...prev,
+    [remoteNodeId]: theEntry,
+  };
+}
+
 function attachDCEventListeners(
   dc: RTCDataChannel,
   setConnTrackStatus: Dispatch<SetStateAction<ConnTrackStatus>>,
@@ -393,37 +435,13 @@ function attachDCEventListeners(
       console.log(`[dbg]${logSource} DCID of chat data channel`, dc.id);
       try {
         const msgObject: ChatMessage = JSON.parse(event.data);
-        let amendedMsgObject: ChatMessage | undefined;
-        let amendedMsgId: string | undefined;
-        if (msgObject.amend) {
-          amendedMsgObject = JSON.parse(msgObject.amend.newMessageJSON);
-          amendedMsgId = msgObject.amend.messageId;
-        }
 
         setConnTrackStatus((prev) => {
-          const theEntry = prev[remoteNodeId] ? { ...prev[remoteNodeId] } : {};
-          const messages = theEntry.messages ? [...theEntry.messages] : [];
-
-          if (amendedMsgObject && amendedMsgId) {
-            const idx = messages.findIndex(
-              (msgObj) => msgObj.messageId === amendedMsgId,
-            );
-            if (idx !== -1) {
-              messages[idx] = amendedMsgObject;
-            }
-          } else {
-            const idx = messages.findIndex(
-              (msg) => msg.messageId === msgObject.messageId,
-            );
-            if (idx === -1) {
-              messages.push(msgObject);
-            }
-          }
-          theEntry.messages = messages;
-          return {
-            ...prev,
-            [remoteNodeId]: theEntry,
-          };
+          return updateConnTrackStatusByMsgObject(
+            prev,
+            remoteNodeId,
+            msgObject,
+          );
         });
       } catch (e) {
         console.error("failed to parse data channel chat message", e);
@@ -786,17 +804,13 @@ export default function Home() {
 
   const messages: ChatMessage[] = connTrackStatus[activeConn]?.messages ?? [];
 
-  const sendMsg = (msgObject: ChatMessage) => {
-    connTrackRef.current[activeConn]?.dataChannel?.send(
+  const sendMsg = (msgObject: ChatMessage, toNodeId: string) => {
+    connTrackRef.current[toNodeId]?.dataChannel?.send(
       JSON.stringify(msgObject),
     );
-    setConnTrackStatus((prev) => ({
-      ...prev,
-      [activeConn]: {
-        ...prev[activeConn],
-        messages: [...(prev[activeConn]?.messages ?? []), msgObject],
-      },
-    }));
+    setConnTrackStatus((prev) => {
+      return updateConnTrackStatusByMsgObject(prev, toNodeId, msgObject);
+    });
   };
 
   const sendAmendMsg = (amendMsgObject: ChatMessage) => {
@@ -815,6 +829,34 @@ export default function Home() {
     const dc = connTrackRef.current[amendMsgObject.toNodeId]?.dataChannel;
     if (dc) {
       dc.send(JSON.stringify(msgToSend));
+      setConnTrackStatus((prev) => {
+        return updateConnTrackStatusByMsgObject(
+          prev,
+          amendMsgObject.toNodeId,
+          msgToSend,
+        );
+      });
+    }
+  };
+
+  const sendMsgDeleteRequest = (toNodeId: string, deletingMsgId: string) => {
+    const msgToSend: ChatMessage = {
+      timestamp: Date.now(),
+      fromNodeId: nodeIdRef.current,
+      toNodeId: toNodeId,
+      messageId: crypto.randomUUID(),
+      message: "",
+      messageMIME: "application/json",
+      delete: {
+        messageId: deletingMsgId,
+      },
+    };
+    const dc = connTrackRef.current[toNodeId]?.dataChannel;
+    if (dc) {
+      dc.send(JSON.stringify(msgToSend));
+      setConnTrackStatus((prev) => {
+        return updateConnTrackStatusByMsgObject(prev, toNodeId, msgToSend);
+      });
     }
   };
 
@@ -917,7 +959,7 @@ export default function Home() {
                       },
                     };
                     const pc = connTrackRef.current[activeConn]?.peerConnection;
-                    sendMsg(msgObject);
+                    sendMsg(msgObject, activeConn);
                     const fileDC = pc?.createDataChannel(
                       PredefinedDCLabel.File,
                     );
@@ -969,7 +1011,7 @@ export default function Home() {
                     } else {
                       msgObject.file = filePayload;
                     }
-                    sendMsg(msgObject);
+                    sendMsg(msgObject, activeConn);
                   }
                 }
               }}
@@ -982,16 +1024,23 @@ export default function Home() {
                   fromNodeId: nodeIdRef.current,
                   toNodeId: activeConn,
                 };
-                sendMsg(msgObject);
-                if (text.startsWith("test-amend")) {
-                  const amendedMsgObject: ChatMessage = {
-                    ...msgObject,
-                    message: text + ":" + "amended message",
-                  };
-                  setTimeout(() => {
-                    sendAmendMsg(amendedMsgObject);
-                  }, 5000);
-                }
+                sendMsg(msgObject, activeConn);
+                // if (text.startsWith("test-delete")) {
+                //   const toNodeId = msgObject.toNodeId;
+                //   const deletingMsgId = msgObject.messageId;
+                //   setTimeout(() => {
+                //     sendMsgDeleteRequest(toNodeId, deletingMsgId);
+                //   }, 5000);
+                // }
+                // if (text.startsWith("test-amend")) {
+                //   const amendedMsgObject: ChatMessage = {
+                //     ...msgObject,
+                //     message: text + ":" + "amended message",
+                //   };
+                //   setTimeout(() => {
+                //     sendAmendMsg(amendedMsgObject);
+                //   }, 5000);
+                // }
               }}
             />
           </Box>

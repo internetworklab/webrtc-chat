@@ -180,6 +180,11 @@ export type ChatMessageAmend = {
   newMessageJSON: string;
 };
 
+export type ChatMessageDelete = {
+  // the messageId of the message to be deleted
+  messageId: string;
+};
+
 export type ChatMessage = {
   // message uuid, globally unique, to prevent a message from being queued multiple times.
   messageId: string;
@@ -189,6 +194,7 @@ export type ChatMessage = {
   video?: ChatMessageFile;
   file?: ChatMessageFile;
   ping?: ChatMessagePing;
+  delete?: ChatMessageDelete;
   amend?: ChatMessageAmend;
   message: string;
   messageMIME?: string;
