@@ -1241,6 +1241,7 @@ export default function Home() {
 
                           fbRef.receivedTotalBytes += chunkSize;
                           if (fbRef.receivedTotalBytes >= file.size) {
+                            // all chunks have been confirmed to be received by the receiver of the file transfer
                             console.log(
                               `[dbg] [initiator] closing file transfer DC`,
                               chunkSize,
