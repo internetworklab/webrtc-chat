@@ -38,13 +38,17 @@ import { BasicWsInfo } from "@/components/BasicWsInfo";
 import { RenderPeerEntry } from "@/components/RenderPeerEntry";
 import { RenderMessage } from "@/components/RenderMessage";
 import { MessageComposer } from "@/components/MessageComposer";
+import {
+  createStreamFromDataChannel,
+  newUint32StreamParser,
+  wordSize,
+} from "@/utls/streams";
 
 const googleStunServer = "stun:stun.l.google.com:19302";
 const pingTimeoutMs = 3000;
 const wsAddr = "ws://localhost:3001/ws";
 const pingIntvMs = 1000;
 const defaultFileSegmentSize = 16 * 1024;
-const wordSize = 4;
 
 function makeConnTrackEntry(): ConnTrackEntry {
   return {
@@ -418,22 +422,31 @@ function updateConnTrackStatusByMsgObject(
 function updateFileTransferStatusEntryByDCData(
   prev: FileTransferStatusEntry,
   dc: RTCDataChannel,
-  data: any,
+  data: Blob | ArrayBuffer | number,
 ): FileTransferStatusEntry {
+  const chunkSize =
+    typeof data === "number"
+      ? data
+      : data instanceof Blob
+        ? data.size
+        : data instanceof ArrayBuffer
+          ? data.byteLength
+          : 0;
+
   return {
     ...prev,
-    bytesReceived: (prev.bytesReceived ?? 0) + data.length,
+    bytesReceived: (prev.bytesReceived ?? 0) + chunkSize,
     chunksReceived: (prev.chunksReceived ?? 0) + 1,
     chunksMetadata: [
       ...(prev.chunksMetadata ?? []),
       { seq: prev.chunksReceived ?? 0, blobType: dc.binaryType },
     ],
     blobChunks:
-      dc.binaryType === "blob"
+      dc.binaryType === "blob" && data instanceof Blob
         ? [...(prev?.blobChunks ?? []), data as Blob]
         : undefined,
     arrayBufferChunks:
-      dc.binaryType === "arraybuffer"
+      dc.binaryType === "arraybuffer" && data instanceof ArrayBuffer
         ? [...(prev?.arrayBufferChunks ?? []), data as ArrayBuffer]
         : undefined,
   };
@@ -442,7 +455,7 @@ function updateFileTransferStatusEntryByDCData(
 function updateConnTrackStatusEntryByDCData(
   prev: ConnTrackStatusEntry,
   dc: RTCDataChannel,
-  data: any,
+  data: Blob | ArrayBuffer | number,
 ) {
   const dcId = dc.id?.toString()!;
   if (!dcId) {
@@ -466,7 +479,7 @@ function updateConnTrackStatusByDCData(
   prev: ConnTrackStatus,
   remoteNodeId: string,
   dc: RTCDataChannel,
-  data: any, // could be a Blob or ArrayBuffer depending on the DC's binaryType
+  data: Blob | ArrayBuffer | number,
 ) {
   const dcId = dc.id?.toString();
   if (!dcId) {
@@ -507,7 +520,8 @@ function closeDCById(
   prev: ConnTrackStatus,
   remoteNodeId: string,
   dcId: string,
-  error?: Error,
+  error: Error | undefined,
+  originFile: File | undefined,
 ) {
   return {
     ...prev,
@@ -521,77 +535,11 @@ function closeDCById(
           }),
           closed: true,
           error: error,
+          originFile: originFile,
         },
       },
     },
   };
-}
-
-// parse a network stream in network byte order (big endian) into a stream of 32-bit words
-function newUint32StreamParser() {
-  let feedBackParseRef: {
-    chunks: any[];
-    totalSize: number;
-  } = {
-    chunks: [],
-    totalSize: 0,
-  };
-
-  const doConsume = async () => {
-    if (feedBackParseRef.totalSize >= wordSize) {
-      const mergedChunk = new Blob(feedBackParseRef.chunks);
-      const rest = feedBackParseRef.totalSize % wordSize;
-      feedBackParseRef.totalSize = 0;
-      feedBackParseRef.chunks = [];
-      if (rest > 0) {
-        const restChunk = mergedChunk.slice(mergedChunk.size - rest);
-        feedBackParseRef.chunks.push(restChunk);
-        feedBackParseRef.totalSize += restChunk.size;
-      }
-      const wordsChunk = mergedChunk.slice(0, mergedChunk.size - rest);
-      const resultWords: number[] = [];
-      try {
-        const ab = await wordsChunk.arrayBuffer();
-        const dv = new DataView(ab);
-
-        for (let i = 0; i < ab.byteLength; i = i + wordSize) {
-          // ab is data from network stream (so it's big endian)
-          const word = dv.getUint32(i, false);
-          resultWords.push(word);
-        }
-        return resultWords;
-      } catch (e) {
-        console.error("failed to get arraybuffer from blob", e);
-      }
-    }
-  };
-  return new TransformStream({
-    async transform(chunk, controller) {
-      feedBackParseRef.chunks.push(chunk);
-      if (chunk instanceof ArrayBuffer) {
-        const chunkSize = (chunk as ArrayBuffer).byteLength;
-        feedBackParseRef.totalSize += chunkSize;
-      } else if (chunk instanceof Blob) {
-        const chunkSize = (chunk as Blob).size;
-        feedBackParseRef.totalSize += chunkSize;
-      } else {
-        console.error(
-          "[dbg] [uint32streamparser] chunk has unknown binary type",
-          chunk,
-        );
-      }
-      const resultWords = await doConsume();
-      for (const word of resultWords ?? []) {
-        controller.enqueue(word);
-      }
-    },
-    async flush(controller) {
-      const resultWords = await doConsume();
-      for (const word of resultWords ?? []) {
-        controller.enqueue(word);
-      }
-    },
-  });
 }
 
 function sendFeedBackToDC(
@@ -636,6 +584,7 @@ function attachDCEventListeners(
   dc.onopen = () => {
     console.log(`[dbg]${logSource} data channel opened`, dc, "dcId", dc.id);
     if (dc.label === PredefinedDCLabel.File) {
+      dc.binaryType = "arraybuffer";
       // for zero-byte file transfer, the onmessage event of the DC might not necessarily fires,
       // so we need to do this to handle zero-byte file transfer (i.e. to transfer some file that has zero bytes of data)
       // and this will not overrride the real data, so the order of arrival of onopen event and onmessage event doesn't matter.
@@ -656,7 +605,7 @@ function attachDCEventListeners(
       const dcId = dc.id?.toString();
       if (dcId) {
         setConnTrackStatus((prev) => {
-          return closeDCById(prev, remoteNodeId, dcId, undefined);
+          return closeDCById(prev, remoteNodeId, dcId, undefined, undefined);
         });
       }
     }
@@ -668,7 +617,7 @@ function attachDCEventListeners(
       const dcId = dc.id?.toString();
       if (dcId) {
         setConnTrackStatus((prev) => {
-          return closeDCById(prev, remoteNodeId, dcId, error.error);
+          return closeDCById(prev, remoteNodeId, dcId, error.error, undefined);
         });
       }
     }
@@ -718,7 +667,12 @@ function attachDCEventListeners(
   } else if (dc.label === PredefinedDCLabel.File) {
     dc.onmessage = (event) => {
       setConnTrackStatus((prev) => {
-        return updateConnTrackStatusByDCData(prev, remoteNodeId, dc, event);
+        return updateConnTrackStatusByDCData(
+          prev,
+          remoteNodeId,
+          dc,
+          event.data,
+        );
       });
       sendFeedBackToDC(dc, event.data?.length ?? 0, logSource);
     };
@@ -1230,6 +1184,7 @@ export default function Home() {
                       const fileDC = pc.createDataChannel(
                         PredefinedDCLabel.File,
                       );
+                      fileDC.binaryType = "arraybuffer";
                       fileDC.onopen = () => {
                         const dcId = fileDC.id?.toString() || "";
                         const msgObject: ChatMessage = {
@@ -1254,28 +1209,50 @@ export default function Home() {
                           );
                         });
 
-                        const feedbackWordStream = newUint32StreamParser();
-                        const fbWriter =
-                          feedbackWordStream.writable.getWriter();
-                        const fbReader =
-                          feedbackWordStream.readable.getReader();
+                        const fbStream = createStreamFromDataChannel(
+                          fileDC,
+                        ).pipeThrough(newUint32StreamParser());
+                        const fbReader = fbStream.getReader();
+                        let fbRef: { receivedTotalBytes: number } = {
+                          receivedTotalBytes: 0,
+                        };
                         fbReader.read().then(({ value, done }) => {
                           if (done) {
                             return;
                           }
-                          const word = value as number;
+                          const chunkSize = value as number;
                           console.log(
-                            `[dbg] [initiator] filetransfer feedback word`,
-                            word,
+                            `[dbg] [initiator] file transfer DC feedback word`,
+                            chunkSize,
                             "file",
                             file,
                             "dcid",
                             dcId,
                           );
+
+                          setConnTrackStatus((prev) => {
+                            return updateConnTrackStatusByDCData(
+                              prev,
+                              msgObject.toNodeId,
+                              fileDC,
+                              chunkSize,
+                            );
+                          });
+
+                          fbRef.receivedTotalBytes += chunkSize;
+                          if (fbRef.receivedTotalBytes >= file.size) {
+                            console.log(
+                              `[dbg] [initiator] closing file transfer DC`,
+                              chunkSize,
+                              "file",
+                              file,
+                              "dcid",
+                              dcId,
+                            );
+                            fileDC.close();
+                          }
                         });
-                        fileDC.onmessage = (event) => {
-                          fbWriter.write(event.data);
-                        };
+
                         let sentSizeRef: { value: number } = { value: 0 };
                         const doSendChunk = () => {
                           const offset = sentSizeRef.value;
@@ -1289,7 +1266,7 @@ export default function Home() {
                               sentSizeRef.value += chunk.size;
                               fileDC.send(chunk);
                               console.log(
-                                `[dbg] [initiator] sent chunk`,
+                                `[dbg] [initiator] file transfer DC sent chunk`,
                                 chunk,
                               );
                             }
@@ -1301,23 +1278,39 @@ export default function Home() {
                         };
 
                         fileDC.onclose = () => {
-                          fbWriter.close();
+                          console.log(
+                            `[dbg] [initiator] file transfer DC closed`,
+                            "file",
+                            file,
+                            "dcid",
+                            dcId,
+                          );
                           setConnTrackStatus((prev) => {
                             return closeDCById(
                               prev,
                               activeConn,
                               dcId,
                               undefined,
+                              file,
                             );
                           });
                         };
                         fileDC.onerror = (ev) => {
+                          console.log(
+                            `[dbg] [initiator] file transfer DC errored`,
+                            ev.error,
+                            "file",
+                            file,
+                            "dcid",
+                            dcId,
+                          );
                           setConnTrackStatus((prev) => {
                             return closeDCById(
                               prev,
                               activeConn,
                               dcId,
                               ev.error,
+                              file,
                             );
                           });
                         };

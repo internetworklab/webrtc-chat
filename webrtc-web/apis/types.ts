@@ -242,6 +242,9 @@ export type FileTransferStatusEntry = {
   blobChunks?: Blob[];
   arrayBufferChunks?: ArrayBuffer[];
 
+  // it should be the sender put the file here
+  originFile?: File;
+
   closed?: boolean;
   error?: Error;
 };
