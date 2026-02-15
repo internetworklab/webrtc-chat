@@ -1241,14 +1241,6 @@ export default function Home() {
                             return;
                           }
                           const chunkSize = value as number;
-                          console.log(
-                            `[dbg] [initiator] file transfer DC feedback word`,
-                            chunkSize,
-                            "file",
-                            file,
-                            "dcid",
-                            dcId,
-                          );
 
                           setConnTrackStatus((prev) => {
                             return updateConnTrackStatusByDCData(
@@ -1262,14 +1254,6 @@ export default function Home() {
                           fbRef.receivedTotalBytes += chunkSize;
                           if (fbRef.receivedTotalBytes >= file.size) {
                             // all chunks have been confirmed to be received by the receiver of the file transfer
-                            console.log(
-                              `[dbg] [initiator] closing file transfer DC`,
-                              chunkSize,
-                              "file",
-                              file,
-                              "dcid",
-                              dcId,
-                            );
                             fileDC.close();
                           }
                           fbReader.read().then(doReadFeedBackStream);
@@ -1297,12 +1281,6 @@ export default function Home() {
                               const s = chunk.size;
                               try {
                                 fileDC.send(chunk);
-                                console.log(
-                                  `[dbg] [initiator] file transfer DC sent chunk`,
-                                  chunk,
-                                  "sent",
-                                  sentSizeRef,
-                                );
                                 return s;
                               } catch (e) {
                                 console.error("failed to send chunk", e);
@@ -1317,10 +1295,6 @@ export default function Home() {
                           let freeSpace =
                             fileDC.bufferedAmountLowThreshold -
                             fileDC.bufferedAmount;
-                          console.log(
-                            `[dbg] [initiator] file transfer DC free space`,
-                            freeSpace,
-                          );
                           while (freeSpace >= 0) {
                             const s = doSendChunk(freeSpace);
                             if (s === 0) {
@@ -1331,23 +1305,10 @@ export default function Home() {
                         };
                         doSendChunks();
                         fileDC.onbufferedamountlow = (event) => {
-                          console.log(
-                            `[dbg] [initiator] file transfer DC buffered amount low`,
-                            event,
-                            fileDC.bufferedAmount,
-                            fileDC.bufferedAmountLowThreshold,
-                          );
                           doSendChunks();
                         };
 
                         fileDC.onclose = () => {
-                          console.log(
-                            `[dbg] [initiator] file transfer DC closed`,
-                            "file",
-                            file,
-                            "dcid",
-                            dcId,
-                          );
                           setConnTrackStatus((prev) => {
                             return closeDCById(
                               prev,
@@ -1359,14 +1320,6 @@ export default function Home() {
                           });
                         };
                         fileDC.onerror = (ev) => {
-                          console.log(
-                            `[dbg] [initiator] file transfer DC errored`,
-                            ev.error,
-                            "file",
-                            file,
-                            "dcid",
-                            dcId,
-                          );
                           setConnTrackStatus((prev) => {
                             return closeDCById(
                               prev,
