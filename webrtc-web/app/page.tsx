@@ -857,7 +857,6 @@ function attachPeerConnectionEventListeners(
 
 export default function Home() {
   const [connTrackStatus, setConnTrackStatus] = useState<ConnTrackStatus>({});
-  console.log("[dbg] connTrackStatus", connTrackStatus);
 
   const {
     rtt,
@@ -888,11 +887,6 @@ export default function Home() {
     if (!ent) {
       ent = makeConnTrackEntry();
       connTrackRef.current[remoteNodeId] = ent;
-      console.log(
-        `[dbg] [${logSource}] initializing conn track entry for remote peer`,
-        remoteNodeId,
-        ent,
-      );
 
       attachPeerConnectionEventListeners(
         ent.peerConnection,
@@ -914,19 +908,9 @@ export default function Home() {
         logSource,
       );
 
-      console.log(
-        `[dbg] [${logSource}] creating SDP offer to remote peer`,
-        remoteNodeId,
-      );
       ent.peerConnection
         .createOffer()
         .then((offer) => {
-          console.log(
-            `[dbg] [${logSource}] offer created`,
-            offer,
-            "sending offer to remote peer",
-            remoteNodeId,
-          );
           const offerPayload: SDPOfferPayload = {
             type: OfferType.Offer,
             offer_json: JSON.stringify(offer),
@@ -956,7 +940,6 @@ export default function Home() {
         console.error(`[dbg] [${logSource}] ping data channel error`, ev);
       };
       pingDC.onclose = (ev) => {
-        console.log(`[dbg] [${logSource}] ping data channel closed`, ev);
         if (ent.pingSeqRef) {
           if (
             ent.pingSeqRef.timer !== undefined &&
@@ -977,7 +960,6 @@ export default function Home() {
       };
 
       pingDC.onmessage = (ev) => {
-        console.log(`[dbg] [${logSource}] ping data channel message`, ev);
         try {
           const msgObject: ChatMessage = JSON.parse(ev.data);
           if (
@@ -989,7 +971,6 @@ export default function Home() {
               const txTime = ent.pingSeqRef?.txMap[seq];
               if (txTime !== undefined && txTime !== null) {
                 const rtt = Date.now() - txTime;
-                console.log(`[dbg] [${logSource}] rtt`, rtt);
                 delete ent.pingSeqRef?.txMap[seq];
                 setConnTrackStatus((prev) => ({
                   ...prev,
@@ -1011,8 +992,6 @@ export default function Home() {
       const pingSeqRef: PingStateRef = { seq: 0, txMap: {} };
       ent.pingSeqRef = pingSeqRef;
       pingDC.onopen = (ev) => {
-        console.log(`[dbg] [${logSource}] ping data channel opened`, ev);
-
         pingSeqRef.timer = setInterval(() => {
           const pingPayload: ChatMessagePing = {
             direction: ChatMessagePingDirection.Ping,
@@ -1031,10 +1010,6 @@ export default function Home() {
           const seq = pingPayload.seq;
           setTimeout(() => {
             if (seq in pingSeqRef.txMap) {
-              console.log(
-                `[dbg] [${logSource}] ping message timeout, seq:`,
-                seq,
-              );
               delete pingSeqRef.txMap[seq];
             }
           }, pingTimeoutMs);
@@ -1100,6 +1075,18 @@ export default function Home() {
       });
     }
   };
+
+  let usernameMap: Record<string, string> = {};
+  for (const conn of conns ?? []) {
+    if (conn.entry?.node_name) {
+      usernameMap = { ...usernameMap, [conn.node_id]: conn.entry.node_name };
+    }
+  }
+
+  // for test purpose
+  if (!(nodeId in usernameMap)) {
+    usernameMap = { ...usernameMap, [nodeId]: "Me" };
+  }
 
   return (
     <Fragment>
@@ -1186,6 +1173,7 @@ export default function Home() {
                 fileTransferStatus={
                   connTrackStatus?.[activeConn]?.fileTransferStatus ?? {}
                 }
+                usernameMap={usernameMap}
               />
             ))}
           </Box>

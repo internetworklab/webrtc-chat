@@ -76,61 +76,120 @@ function RenderFile(props: {
   );
 }
 
+function RenderUsername(props: { username: string }) {
+  const { username } = props;
+  const firstCap =
+    username && username.length > 0 ? username[0].toUpperCase() : "";
+  return (
+    <Box
+      sx={{
+        width: "48px",
+        height: "48px",
+        backgroundColor: "orange",
+        borderRadius: "100%",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontWeight: "bold",
+        fontSize: "1.5rem",
+        flexShrink: 0,
+        color: "white",
+      }}
+    >
+      {firstCap}
+    </Box>
+  );
+}
+
 export function RenderMessage(props: {
   message: ChatMessage;
   onAmend?: (amendedMsg: ChatMessage) => void;
   onDelete?: (deletedMsgId: string) => void;
   fileTransferStatus: Record<string, FileTransferStatusEntry>;
+  usernameMap: Record<string, string>;
 }) {
   // todo: add message edit feature and delete feature in context menu
-  const { message, onAmend, onDelete, fileTransferStatus } = props;
+  const { message, onAmend, onDelete, fileTransferStatus, usernameMap } = props;
+  const username = usernameMap[message.fromNodeId] ?? "";
 
   return (
-    <Box>
-      <Card
+    <Box
+      sx={{
+        display: "flex",
+        flexDirection: "row",
+        gap: 1,
+        maxWidth: "100%",
+        width: "max-content",
+      }}
+    >
+      <RenderUsername username={username} />
+      <Box
         sx={{
           gap: 1,
           flexWrap: "wrap",
-          justifyContent: "space-between",
-          alignItems: "center",
-          maxWidth: "100%",
+          flex: 1,
           width: "max-content",
-          flexShrink: 0,
+          maxWidth: "100%",
           position: "relative",
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
         }}
       >
-        {message.image && (
-          <img
-            style={{ maxHeight: "240px" }}
-            src={message.image.url}
-            alt={message.message}
-          />
-        )}
-        {message.video && (
-          <video
-            autoPlay={false}
-            controls
-            style={{ maxHeight: "240px" }}
-            src={message.video.url}
-          />
-        )}
-        {message.file && (
-          <RenderFile
-            file={message.file}
-            fileTransferStatus={fileTransferStatus}
-          />
-        )}
-        {message.message && (
-          <Box sx={{ padding: 2, whiteSpace: "pre-wrap" }}>
-            {message.message}
-          </Box>
-        )}
-        {message.richText && (
-          <Box sx={{ padding: 2, whiteSpace: "pre-wrap" }}>
-            {message.richText.content}
-          </Box>
-        )}
-      </Card>
+        {username && <Box sx={{ paddingLeft: 1 }}>{username}</Box>}
+        <Card
+          sx={{
+            gap: 1,
+            flexWrap: "wrap",
+            justifyContent: "space-between",
+            alignItems: "center",
+            maxWidth: "100%",
+            flex: 1,
+            position: "relative",
+          }}
+        >
+          {message.image && (
+            <img
+              style={{ maxHeight: "240px" }}
+              src={message.image.url}
+              alt={message.message}
+            />
+          )}
+          {message.video && (
+            <video
+              autoPlay={false}
+              controls
+              style={{ maxHeight: "240px" }}
+              src={message.video.url}
+            />
+          )}
+          {message.file && (
+            <RenderFile
+              file={message.file}
+              fileTransferStatus={fileTransferStatus}
+            />
+          )}
+          {message.message && (
+            <Box
+              sx={{
+                padding: 2,
+                whiteSpace: "pre-wrap",
+                wordWrap: "break-word",
+                hyphens: "manual",
+                hyphenateCharacter: "-",
+                hyphenateLimitChars: 0,
+              }}
+            >
+              {message.message}
+            </Box>
+          )}
+          {message.richText && (
+            <Box sx={{ padding: 2, whiteSpace: "pre-wrap" }}>
+              {message.richText.content}
+            </Box>
+          )}
+        </Card>
+      </Box>
     </Box>
   );
 }
