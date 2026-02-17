@@ -30,6 +30,7 @@ import {
   Select,
   MenuItem,
   TextField,
+  Paper,
 } from "@mui/material";
 import {
   Dispatch,
@@ -1276,6 +1277,22 @@ export default function Home() {
               overflow: "hidden",
             }}
           >
+            <Paper
+              sx={{
+                flexShrink: 0,
+                padding: 2,
+                borderRadius: 0,
+                display: "flex",
+                alignItems: "center",
+                gap: 1,
+              }}
+            >
+              <RenderAvatar
+                username={activeConn ? usernameMap[activeConn] : ""}
+                size="small"
+              />
+              <Box>{activeConn ? usernameMap[activeConn] : ""}</Box>
+            </Paper>
             <Box
               sx={{
                 flex: 1,

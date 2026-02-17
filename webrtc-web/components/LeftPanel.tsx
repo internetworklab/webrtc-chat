@@ -11,12 +11,19 @@ export function LeftPanel(props: {
   const [width, setWidth] = useState(initW);
   return (
     <Box
-      sx={{
-        width: `${width}px`,
-        height: "100%",
-        position: "relative",
-        flexShrink: 0,
-      }}
+      sx={[
+        {
+          width: `${width}px`,
+          height: "100%",
+          position: "relative",
+          flexShrink: 0,
+          borderRight: "1px solid #eee",
+        },
+        (theme) =>
+          theme.applyStyles("dark", {
+            borderRight: "1px solid #333",
+          }),
+      ]}
     >
       <Paper
         sx={{
