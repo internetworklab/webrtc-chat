@@ -126,24 +126,44 @@ export function RenderMessage(props: {
           }}
         >
           {message.file &&
-            message.file.category === ChatMessageFileCategory.Image &&
-            message.file.url && (
-              <img
-                style={{ maxHeight: "240px" }}
-                src={message.file.url}
-                alt={message.message}
-              />
-            )}
+          message.file.category === ChatMessageFileCategory.Image &&
+          message.file.url ? (
+            <img
+              style={{ maxHeight: "240px" }}
+              src={message.file.url}
+              alt={message.message}
+            />
+          ) : message.file?.thumbnail?.dataURL ? (
+            <img
+              style={{ maxHeight: "240px", filter: "blur(1.5rem)" }}
+              src={message.file?.thumbnail?.dataURL}
+              alt={message.message}
+            />
+          ) : (
+            <Box
+              sx={{ height: "240px", width: "240px", backgroundColor: "#000" }}
+            ></Box>
+          )}
           {message.file &&
-            message.file.category === ChatMessageFileCategory.Video &&
-            message.file.url && (
-              <video
-                autoPlay={false}
-                controls
-                style={{ maxHeight: "240px" }}
-                src={message.file.url}
-              />
-            )}
+          message.file.category === ChatMessageFileCategory.Video &&
+          message.file.url ? (
+            <video
+              autoPlay={false}
+              controls
+              style={{ maxHeight: "240px" }}
+              src={message.file.url}
+            />
+          ) : message.file?.thumbnail?.dataURL ? (
+            <img
+              style={{ maxHeight: "240px", filter: "blur(1.5rem)" }}
+              src={message.file?.thumbnail?.dataURL}
+              alt={message.message}
+            />
+          ) : (
+            <Box
+              sx={{ height: "240px", width: "240px", backgroundColor: "#000" }}
+            ></Box>
+          )}
           {message.file &&
             message.file.category === ChatMessageFileCategory.File && (
               <RenderFile
