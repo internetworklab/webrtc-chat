@@ -907,7 +907,6 @@ function listenForAck(
   timeoutMs: number,
   onAck: (timeout: boolean, error?: Error) => void,
 ) {
-  const evListenerId = crypto.randomUUID();
   const timeoutId = setTimeout(() => {
     onAck(true);
   }, timeoutMs);
@@ -1483,25 +1482,26 @@ export default function Home() {
                   const pc = connTrackRef.current[activeConn]?.peerConnection;
                   if (filelist && filelist.length > 0 && pc) {
                     for (const file of filelist) {
+                      const msgObject: ChatMessage = {
+                        messageId: crypto.randomUUID(),
+                        timestamp: Date.now(),
+                        fromNodeId: nodeIdRef.current,
+                        toNodeId: activeConn,
+                        file: {
+                          category: fileCat,
+                          name: file.name,
+                          type: file.type,
+                          size: file.size,
+                          dcId: "",
+                        },
+                      };
                       const fileDC = pc.createDataChannel(
                         PredefinedDCLabel.File,
                       );
                       fileDC.binaryType = "arraybuffer";
                       fileDC.onopen = () => {
                         const dcId = fileDC.id?.toString() || "";
-                        const msgObject: ChatMessage = {
-                          messageId: crypto.randomUUID(),
-                          timestamp: Date.now(),
-                          fromNodeId: nodeIdRef.current,
-                          toNodeId: activeConn,
-                          file: {
-                            category: fileCat,
-                            name: file.name,
-                            type: file.type,
-                            size: file.size,
-                            dcId: dcId,
-                          },
-                        };
+                        msgObject.file!.dcId = dcId;
 
                         sendMsg(msgObject, msgObject.toNodeId)
                           .then((msgObject) => {
