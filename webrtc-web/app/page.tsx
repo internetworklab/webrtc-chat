@@ -606,6 +606,7 @@ function createFileTransferStatusEntry(
     [remoteNodeId]: {
       ...(prev[remoteNodeId] ?? {}),
       fileTransferStatus: {
+        ...(prev[remoteNodeId]?.fileTransferStatus ?? {}),
         [dcId]: { bytesReceived: 0 },
       },
     },
@@ -1016,6 +1017,104 @@ function transmitFileData(
   };
 }
 
+function sendMsg(
+  dc: RTCDataChannel,
+  msgObject: ChatMessage,
+  toNodeId: string,
+  setConnTrackStatus: Dispatch<SetStateAction<ConnTrackStatus>>,
+): Promise<ChatMessage> {
+  setConnTrackStatus((prev) => {
+    return updateConnTrackStatusByMsgObject(prev, toNodeId, msgObject);
+  });
+
+  return new Promise((resolve, reject) => {
+    listenForAck(
+      dc,
+      msgObject.messageId,
+      defaultMsgTimeoutMs,
+      (timeout, err) => {
+        if (timeout) {
+          reject(
+            new Error(`timeout: message ${msgObject.messageId} timed out`),
+          );
+          return;
+        }
+        if (err) {
+          reject(
+            new Error(
+              `error: message ${msgObject.messageId} failed to be acked: ${err.message}`,
+            ),
+          );
+          return;
+        }
+        resolve(msgObject);
+      },
+    );
+    dc.send(JSON.stringify(msgObject));
+  });
+}
+
+function transmitFileViaPC(
+  pc: RTCPeerConnection,
+  dc: RTCDataChannel,
+  fromNodeId: string,
+  toNodeId: string,
+  fileCat: ChatMessageFileCategory,
+  file: File,
+  setConnTrackStatus: Dispatch<SetStateAction<ConnTrackStatus>>,
+) {
+  const fileDC = pc.createDataChannel(PredefinedDCLabel.File);
+  fileDC.binaryType = "arraybuffer";
+  fileDC.onopen = () => {
+    const dcId = fileDC.id?.toString() || "";
+    const msgObject: ChatMessage = {
+      messageId: crypto.randomUUID(),
+      timestamp: Date.now(),
+      fromNodeId: fromNodeId,
+      toNodeId: toNodeId,
+      file: {
+        category: fileCat,
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        dcId: "",
+      },
+    };
+
+    sendMsg(dc, msgObject, msgObject.toNodeId, setConnTrackStatus)
+      .then((msgObject) => {
+        setConnTrackStatus((prev) => {
+          return createFileTransferStatusEntry(prev, msgObject.toNodeId, dcId);
+        });
+
+        transmitFileData(fileDC, file, (_, chunk) => {
+          setConnTrackStatus((prev) => {
+            return updateConnTrackStatusByDCData(
+              prev,
+              msgObject.toNodeId,
+              fileDC,
+              chunk,
+            );
+          });
+        });
+
+        fileDC.onclose = () => {
+          setConnTrackStatus((prev) => {
+            return closeDCById(prev, toNodeId, dcId, undefined, file);
+          });
+        };
+        fileDC.onerror = (ev) => {
+          setConnTrackStatus((prev) => {
+            return closeDCById(prev, toNodeId, dcId, ev.error, file);
+          });
+        };
+      })
+      .catch((e) => {
+        console.error("failed to send(or ack) message", e);
+      });
+  };
+}
+
 export default function Home() {
   const [connTrackStatus, setConnTrackStatus] = useState<ConnTrackStatus>({});
 
@@ -1185,48 +1284,6 @@ export default function Home() {
     connTrackStatus[activeConn]?.messages?.filter(
       (msg) => msg.acked || msg.fromNodeId !== nodeId,
     ) ?? [];
-
-  const sendMsg = (
-    msgObject: ChatMessage,
-    toNodeId: string,
-  ): Promise<ChatMessage> => {
-    const dc = connTrackRef.current[toNodeId]?.dataChannel;
-    if (!dc) {
-      return Promise.reject(
-        new Error(`data channel for node ${toNodeId} not found`),
-      );
-    }
-
-    setConnTrackStatus((prev) => {
-      return updateConnTrackStatusByMsgObject(prev, toNodeId, msgObject);
-    });
-
-    return new Promise((resolve, reject) => {
-      listenForAck(
-        dc,
-        msgObject.messageId,
-        defaultMsgTimeoutMs,
-        (timeout, err) => {
-          if (timeout) {
-            reject(
-              new Error(`timeout: message ${msgObject.messageId} timed out`),
-            );
-            return;
-          }
-          if (err) {
-            reject(
-              new Error(
-                `error: message ${msgObject.messageId} failed to be acked: ${err.message}`,
-              ),
-            );
-            return;
-          }
-          resolve(msgObject);
-        },
-      );
-      dc.send(JSON.stringify(msgObject));
-    });
-  };
 
   const sendAmendMsg = (amendMsgObject: ChatMessage) => {
     const msgToSend: ChatMessage = {
@@ -1480,77 +1537,18 @@ export default function Home() {
                 onFile={(filelist) => {
                   const fileCat = ChatMessageFileCategory.File;
                   const pc = connTrackRef.current[activeConn]?.peerConnection;
-                  if (filelist && filelist.length > 0 && pc) {
+                  const dc = connTrackRef.current[activeConn]?.dataChannel;
+                  if (filelist && filelist.length > 0 && pc && dc) {
                     for (const file of filelist) {
-                      const msgObject: ChatMessage = {
-                        messageId: crypto.randomUUID(),
-                        timestamp: Date.now(),
-                        fromNodeId: nodeIdRef.current,
-                        toNodeId: activeConn,
-                        file: {
-                          category: fileCat,
-                          name: file.name,
-                          type: file.type,
-                          size: file.size,
-                          dcId: "",
-                        },
-                      };
-                      const fileDC = pc.createDataChannel(
-                        PredefinedDCLabel.File,
+                      transmitFileViaPC(
+                        pc,
+                        dc,
+                        nodeIdRef.current,
+                        activeConn,
+                        fileCat,
+                        file,
+                        setConnTrackStatus,
                       );
-                      fileDC.binaryType = "arraybuffer";
-                      fileDC.onopen = () => {
-                        const dcId = fileDC.id?.toString() || "";
-                        msgObject.file!.dcId = dcId;
-
-                        sendMsg(msgObject, msgObject.toNodeId)
-                          .then((msgObject) => {
-                            setConnTrackStatus((prev) => {
-                              return createFileTransferStatusEntry(
-                                prev,
-                                msgObject.toNodeId,
-                                dcId,
-                              );
-                            });
-
-                            transmitFileData(fileDC, file, (_, chunk) => {
-                              setConnTrackStatus((prev) => {
-                                return updateConnTrackStatusByDCData(
-                                  prev,
-                                  msgObject.toNodeId,
-                                  fileDC,
-                                  chunk,
-                                );
-                              });
-                            });
-
-                            fileDC.onclose = () => {
-                              setConnTrackStatus((prev) => {
-                                return closeDCById(
-                                  prev,
-                                  activeConn,
-                                  dcId,
-                                  undefined,
-                                  file,
-                                );
-                              });
-                            };
-                            fileDC.onerror = (ev) => {
-                              setConnTrackStatus((prev) => {
-                                return closeDCById(
-                                  prev,
-                                  activeConn,
-                                  dcId,
-                                  ev.error,
-                                  file,
-                                );
-                              });
-                            };
-                          })
-                          .catch((e) => {
-                            console.error("failed to send(or ack) message", e);
-                          });
-                      };
                     }
                   }
                 }}
@@ -1602,24 +1600,27 @@ export default function Home() {
                   // }
                 }}
                 onText={(text) => {
-                  const msgObject: ChatMessage = {
-                    messageId: crypto.randomUUID(),
-                    message: text,
-                    timestamp: Date.now(),
-                    fromNodeId: nodeIdRef.current,
-                    toNodeId: activeConn,
-                  };
-                  sendMsg(msgObject, activeConn)
-                    .then((msgObject) => {
-                      console.log(
-                        "[dbg] [ack] message",
-                        msgObject.messageId,
-                        "was acked",
-                      );
-                    })
-                    .catch((e) => {
-                      console.error("failed to send(or ack) message", e);
-                    });
+                  const dc = connTrackRef.current[activeConn]?.dataChannel;
+                  if (dc) {
+                    const msgObject: ChatMessage = {
+                      messageId: crypto.randomUUID(),
+                      message: text,
+                      timestamp: Date.now(),
+                      fromNodeId: nodeIdRef.current,
+                      toNodeId: activeConn,
+                    };
+                    sendMsg(dc, msgObject, activeConn, setConnTrackStatus)
+                      .then((msgObject) => {
+                        console.log(
+                          "[dbg] [ack] message",
+                          msgObject.messageId,
+                          "was acked",
+                        );
+                      })
+                      .catch((e) => {
+                        console.error("failed to send(or ack) message", e);
+                      });
+                  }
                 }}
               />
             </Box>
