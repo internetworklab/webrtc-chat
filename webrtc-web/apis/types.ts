@@ -258,7 +258,6 @@ export type FileTransferStatusEntry = {
 
   // depending on the data channel that actually transmit the file data,
   // if the DC use blob, we use blobChunks here, otherwise we use arrayBufferChunks here
-  blobChunks?: Blob[];
   arrayBufferChunks?: ArrayBuffer[];
 
   closed?: boolean;

@@ -438,7 +438,7 @@ function updateConnTrackStatusByMsgObject(
 
 function updateFileTransferStatusEntryByDCData(
   prev: FileTransferStatusEntry,
-  dc: RTCDataChannel,
+  binaryType: BinaryType,
   data: Blob | ArrayBuffer | number,
 ): FileTransferStatusEntry {
   const chunkSize =
@@ -456,14 +456,10 @@ function updateFileTransferStatusEntryByDCData(
     chunksReceived: (prev.chunksReceived ?? 0) + 1,
     chunksMetadata: [
       ...(prev.chunksMetadata ?? []),
-      { seq: prev.chunksReceived ?? 0, blobType: dc.binaryType },
+      { seq: prev.chunksReceived ?? 0, blobType: binaryType },
     ],
-    blobChunks:
-      dc.binaryType === "blob" && data instanceof Blob
-        ? [...(prev?.blobChunks ?? []), data as Blob]
-        : undefined,
     arrayBufferChunks:
-      dc.binaryType === "arraybuffer" && data instanceof ArrayBuffer
+      binaryType === "arraybuffer" && data instanceof ArrayBuffer
         ? [...(prev?.arrayBufferChunks ?? []), data as ArrayBuffer]
         : undefined,
   };
@@ -471,20 +467,17 @@ function updateFileTransferStatusEntryByDCData(
 
 function updateConnTrackStatusEntryByDCData(
   prev: ConnTrackStatusEntry,
-  dc: RTCDataChannel,
+  dcId: string,
+  binaryType: BinaryType,
   data: Blob | ArrayBuffer | number,
 ) {
-  const dcId = dc.id?.toString()!;
-  if (!dcId) {
-    return prev;
-  }
   return {
     ...prev,
     fileTransferStatus: {
       ...(prev?.fileTransferStatus ?? {}),
       [dcId]: updateFileTransferStatusEntryByDCData(
         prev?.fileTransferStatus?.[dcId] ?? { bytesReceived: 0 },
-        dc,
+        binaryType,
         data,
       ),
     },
@@ -495,19 +488,16 @@ function updateConnTrackStatusEntryByDCData(
 function updateConnTrackStatusByDCData(
   prev: ConnTrackStatus,
   remoteNodeId: string,
-  dc: RTCDataChannel,
+  dcID: string,
+  binaryType: BinaryType,
   data: Blob | ArrayBuffer | number,
 ) {
-  const dcId = dc.id?.toString();
-  if (!dcId) {
-    return prev;
-  }
-
   const connTrackStatus = {
     ...prev,
     [remoteNodeId]: updateConnTrackStatusEntryByDCData(
       prev[remoteNodeId] ?? {},
-      dc,
+      dcID,
+      binaryType,
       data,
     ),
   };
@@ -709,7 +699,8 @@ function attachDCEventListeners(
         return updateConnTrackStatusByDCData(
           prev,
           remoteNodeId,
-          dc,
+          dc.id?.toString() ?? "",
+          dc.binaryType,
           event.data,
         );
       });
@@ -1067,6 +1058,7 @@ function transmitFileViaPC(
   fileDC.binaryType = "arraybuffer";
   fileDC.onopen = () => {
     const dcId = fileDC.id?.toString() || "";
+    console.log("[dbg] [dcId] dcId", dcId);
     const msgObject: ChatMessage = {
       messageId: crypto.randomUUID(),
       timestamp: Date.now(),
@@ -1077,7 +1069,7 @@ function transmitFileViaPC(
         name: file.name,
         type: file.type,
         size: file.size,
-        dcId: "",
+        dcId: dcId,
       },
     };
 
@@ -1092,7 +1084,8 @@ function transmitFileViaPC(
             return updateConnTrackStatusByDCData(
               prev,
               msgObject.toNodeId,
-              fileDC,
+              dcId,
+              fileDC.binaryType,
               chunk,
             );
           });
