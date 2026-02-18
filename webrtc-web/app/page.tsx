@@ -60,6 +60,8 @@ const googleStunServer = "stun:stun.l.google.com:19302";
 const pingTimeoutMs = 3000;
 const pingIntvMs = 1000;
 const defaultFileSegmentSize = 128 * 1024;
+const defaultMsgTimeoutMs = 3000;
+const defaultFileDCBufferAmountThreshold = 4 * 1024 * 1024;
 
 function makeConnTrackEntry(iceServers: string[]): ConnTrackEntry {
   return {
@@ -563,6 +565,7 @@ function closeDCById(
                 chunks:
                   prev[remoteNodeId]?.fileTransferStatus?.[dcId]
                     ?.arrayBufferChunks ?? [],
+                error: error,
               },
             }
           : msg,
@@ -909,12 +912,6 @@ function listenForAck(
     onAck(true);
   }, timeoutMs);
   const evListener = (ev: any) => {
-    console.log(
-      "[dbg] [ack] ev handler of id",
-      evListenerId,
-      "was called with data",
-      ev.data,
-    );
     try {
       const evData = JSON.parse(ev.data) as any as ChatMessage;
       if (evData.ack && evData.ack.messageId === msgId) {
@@ -927,6 +924,97 @@ function listenForAck(
     dc.removeEventListener("message", evListener);
   };
   dc.addEventListener("message", evListener);
+}
+
+// the caller has to ensure that the fileDC is opened before calling this function.
+function transmitFileData(
+  fileDC: RTCDataChannel,
+  file: File,
+  onProgress: (
+    totalBytesTransferred: number,
+    chunkSizeJustTransferred: number,
+  ) => void,
+) {
+  const fbStream = createStreamFromDataChannel(fileDC).pipeThrough(
+    newUint32StreamParser(),
+  );
+
+  const fbReader = fbStream.getReader();
+
+  let fbRef: { receivedTotalBytes: number } = {
+    receivedTotalBytes: 0,
+  };
+
+  const doReadFeedBackStream = ({
+    value,
+    done,
+  }: {
+    value: any;
+    done: boolean;
+  }) => {
+    if (done) {
+      return;
+    }
+    const chunkSize = value as number;
+
+    fbRef.receivedTotalBytes += chunkSize;
+    onProgress(fbRef.receivedTotalBytes, chunkSize);
+    if (fbRef.receivedTotalBytes >= file.size) {
+      // all chunks have been confirmed to be received by the receiver of the file transfer
+      fileDC.close();
+    }
+    fbReader.read().then(doReadFeedBackStream);
+  };
+
+  fbReader
+    .read()
+    .then(doReadFeedBackStream)
+    .catch((e) => console.error("failed to read feed back stream", e));
+
+  let sentSizeRef: { value: number } = {
+    value: 0,
+  };
+
+  const doSendChunk = (maxSize: number) => {
+    const offset = sentSizeRef.value;
+    const endLimit = Math.min(
+      sentSizeRef.value + defaultFileSegmentSize,
+      file.size,
+      offset + maxSize + 1,
+    );
+    if (endLimit > offset) {
+      const chunk = file.slice(offset, endLimit);
+      if (chunk.size > 0) {
+        sentSizeRef.value += chunk.size;
+        const s = chunk.size;
+        try {
+          fileDC.send(chunk);
+          return s;
+        } catch (e) {
+          console.error("failed to send chunk", e);
+        }
+      }
+    }
+    return 0;
+  };
+
+  fileDC.bufferedAmountLowThreshold = defaultFileDCBufferAmountThreshold;
+
+  const doSendChunks = () => {
+    let freeSpace = fileDC.bufferedAmountLowThreshold - fileDC.bufferedAmount;
+    while (freeSpace >= 0) {
+      const s = doSendChunk(freeSpace);
+      if (s === 0) {
+        break;
+      }
+      freeSpace -= s;
+    }
+  };
+
+  doSendChunks();
+  fileDC.onbufferedamountlow = (event) => {
+    doSendChunks();
+  };
 }
 
 export default function Home() {
@@ -1099,12 +1187,45 @@ export default function Home() {
       (msg) => msg.acked || msg.fromNodeId !== nodeId,
     ) ?? [];
 
-  const sendMsg = (msgObject: ChatMessage, toNodeId: string) => {
-    connTrackRef.current[toNodeId]?.dataChannel?.send(
-      JSON.stringify(msgObject),
-    );
+  const sendMsg = (
+    msgObject: ChatMessage,
+    toNodeId: string,
+  ): Promise<ChatMessage> => {
+    const dc = connTrackRef.current[toNodeId]?.dataChannel;
+    if (!dc) {
+      return Promise.reject(
+        new Error(`data channel for node ${toNodeId} not found`),
+      );
+    }
+
     setConnTrackStatus((prev) => {
       return updateConnTrackStatusByMsgObject(prev, toNodeId, msgObject);
+    });
+
+    return new Promise((resolve, reject) => {
+      listenForAck(
+        dc,
+        msgObject.messageId,
+        defaultMsgTimeoutMs,
+        (timeout, err) => {
+          if (timeout) {
+            reject(
+              new Error(`timeout: message ${msgObject.messageId} timed out`),
+            );
+            return;
+          }
+          if (err) {
+            reject(
+              new Error(
+                `error: message ${msgObject.messageId} failed to be acked: ${err.message}`,
+              ),
+            );
+            return;
+          }
+          resolve(msgObject);
+        },
+      );
+      dc.send(JSON.stringify(msgObject));
     });
   };
 
@@ -1253,7 +1374,7 @@ export default function Home() {
                   padding: 2,
                 }}
               >
-                <Box>Choose Server:</Box>
+                <Box sx={{ justifySelf: "right" }}>Choose Server:</Box>
                 <Select
                   variant="standard"
                   label="Server"
@@ -1264,7 +1385,7 @@ export default function Home() {
                     <MenuItem value={server.id}>{server.name}</MenuItem>
                   ))}
                 </Select>
-                <Box>Pick a Name:</Box>
+                <Box sx={{ justifySelf: "right" }}>Pick a Name:</Box>
                 <TextField
                   fullWidth
                   variant="standard"
@@ -1359,151 +1480,77 @@ export default function Home() {
               <MessageComposer
                 onFile={(filelist) => {
                   const fileCat = ChatMessageFileCategory.File;
-                  if (filelist && filelist.length > 0) {
+                  const pc = connTrackRef.current[activeConn]?.peerConnection;
+                  if (filelist && filelist.length > 0 && pc) {
                     for (const file of filelist) {
-                      const pc =
-                        connTrackRef.current[activeConn]?.peerConnection;
-                      if (pc) {
-                        const fileDC = pc.createDataChannel(
-                          PredefinedDCLabel.File,
-                        );
-                        fileDC.binaryType = "arraybuffer";
-                        fileDC.onopen = () => {
-                          const dcId = fileDC.id?.toString() || "";
-                          const msgObject: ChatMessage = {
-                            messageId: crypto.randomUUID(),
-                            timestamp: Date.now(),
-                            fromNodeId: nodeIdRef.current,
-                            toNodeId: activeConn,
-                            file: {
-                              category: fileCat,
-                              name: file.name,
-                              type: file.type,
-                              size: file.size,
-                              dcId: dcId,
-                            },
-                          };
-                          sendMsg(msgObject, msgObject.toNodeId);
-                          setConnTrackStatus((prev) => {
-                            return createFileTransferStatusEntry(
-                              prev,
-                              msgObject.toNodeId,
-                              dcId,
-                            );
-                          });
+                      const fileDC = pc.createDataChannel(
+                        PredefinedDCLabel.File,
+                      );
+                      fileDC.binaryType = "arraybuffer";
+                      fileDC.onopen = () => {
+                        const dcId = fileDC.id?.toString() || "";
+                        const msgObject: ChatMessage = {
+                          messageId: crypto.randomUUID(),
+                          timestamp: Date.now(),
+                          fromNodeId: nodeIdRef.current,
+                          toNodeId: activeConn,
+                          file: {
+                            category: fileCat,
+                            name: file.name,
+                            type: file.type,
+                            size: file.size,
+                            dcId: dcId,
+                          },
+                        };
 
-                          const fbStream = createStreamFromDataChannel(
-                            fileDC,
-                          ).pipeThrough(newUint32StreamParser());
-                          const fbReader = fbStream.getReader();
-                          let fbRef: { receivedTotalBytes: number } = {
-                            receivedTotalBytes: 0,
-                          };
-                          const doReadFeedBackStream = ({
-                            value,
-                            done,
-                          }: {
-                            value: any;
-                            done: boolean;
-                          }) => {
-                            if (done) {
-                              return;
-                            }
-                            const chunkSize = value as number;
-
+                        sendMsg(msgObject, msgObject.toNodeId)
+                          .then((msgObject) => {
                             setConnTrackStatus((prev) => {
-                              return updateConnTrackStatusByDCData(
+                              return createFileTransferStatusEntry(
                                 prev,
                                 msgObject.toNodeId,
-                                fileDC,
-                                chunkSize,
-                              );
-                            });
-
-                            fbRef.receivedTotalBytes += chunkSize;
-                            if (fbRef.receivedTotalBytes >= file.size) {
-                              // all chunks have been confirmed to be received by the receiver of the file transfer
-                              fileDC.close();
-                            }
-                            fbReader.read().then(doReadFeedBackStream);
-                          };
-                          fbReader
-                            .read()
-                            .then(doReadFeedBackStream)
-                            .catch((e) =>
-                              console.error(
-                                "failed to read feed back stream",
-                                e,
-                              ),
-                            );
-
-                          let sentSizeRef: { value: number } = { value: 0 };
-
-                          const doSendChunk = (maxSize: number) => {
-                            const offset = sentSizeRef.value;
-                            const endLimit = Math.min(
-                              sentSizeRef.value + defaultFileSegmentSize,
-                              file.size,
-                              offset + maxSize + 1,
-                            );
-                            if (endLimit > offset) {
-                              const chunk = file.slice(offset, endLimit);
-                              if (chunk.size > 0) {
-                                sentSizeRef.value += chunk.size;
-                                const s = chunk.size;
-                                try {
-                                  fileDC.send(chunk);
-                                  return s;
-                                } catch (e) {
-                                  console.error("failed to send chunk", e);
-                                }
-                              }
-                            }
-                            return 0;
-                          };
-
-                          fileDC.bufferedAmountLowThreshold = 4 * 1024 * 1024;
-                          const doSendChunks = () => {
-                            let freeSpace =
-                              fileDC.bufferedAmountLowThreshold -
-                              fileDC.bufferedAmount;
-                            while (freeSpace >= 0) {
-                              const s = doSendChunk(freeSpace);
-                              if (s === 0) {
-                                break;
-                              }
-                              freeSpace -= s;
-                            }
-                          };
-                          doSendChunks();
-                          fileDC.onbufferedamountlow = (event) => {
-                            doSendChunks();
-                          };
-
-                          fileDC.onclose = () => {
-                            setConnTrackStatus((prev) => {
-                              return closeDCById(
-                                prev,
-                                activeConn,
                                 dcId,
-                                undefined,
-                                file,
                               );
                             });
-                          };
-                          fileDC.onerror = (ev) => {
-                            setConnTrackStatus((prev) => {
-                              return closeDCById(
-                                prev,
-                                activeConn,
-                                dcId,
-                                ev.error,
-                                file,
-                              );
+
+                            transmitFileData(fileDC, file, (_, chunk) => {
+                              setConnTrackStatus((prev) => {
+                                return updateConnTrackStatusByDCData(
+                                  prev,
+                                  msgObject.toNodeId,
+                                  fileDC,
+                                  chunk,
+                                );
+                              });
                             });
-                          };
-                        };
-                      }
+
+                            fileDC.onclose = () => {
+                              setConnTrackStatus((prev) => {
+                                return closeDCById(
+                                  prev,
+                                  activeConn,
+                                  dcId,
+                                  undefined,
+                                  file,
+                                );
+                              });
+                            };
+                            fileDC.onerror = (ev) => {
+                              setConnTrackStatus((prev) => {
+                                return closeDCById(
+                                  prev,
+                                  activeConn,
+                                  dcId,
+                                  ev.error,
+                                  file,
+                                );
+                              });
+                            };
+                          })
+                          .catch((e) => {
+                            console.error("failed to send(or ack) message", e);
+                          });
+                      };
                     }
                   }
                 }}
@@ -1562,30 +1609,17 @@ export default function Home() {
                     fromNodeId: nodeIdRef.current,
                     toNodeId: activeConn,
                   };
-                  sendMsg(msgObject, activeConn);
-                  const dc = connTrackRef.current?.[activeConn]?.dataChannel;
-                  if (dc) {
-                    console.log(
-                      "[dbg] [ack] waiting for ack of message",
-                      msgObject.messageId,
-                    );
-                    listenForAck(
-                      dc,
-                      msgObject.messageId,
-                      3000,
-                      (timeout, err) => {
-                        console.log(
-                          "[dbg] [ack] message",
-                          msgObject.messageId,
-                          "was acked",
-                          "timeout",
-                          timeout,
-                          "error",
-                          err,
-                        );
-                      },
-                    );
-                  }
+                  sendMsg(msgObject, activeConn)
+                    .then((msgObject) => {
+                      console.log(
+                        "[dbg] [ack] message",
+                        msgObject.messageId,
+                        "was acked",
+                      );
+                    })
+                    .catch((e) => {
+                      console.error("failed to send(or ack) message", e);
+                    });
                 }}
               />
             </Box>

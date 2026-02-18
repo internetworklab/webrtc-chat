@@ -180,6 +180,8 @@ export type ChatMessageFile = {
   url?: string;
   originFile?: File;
   chunks?: ArrayBuffer[];
+
+  error?: Error;
 };
 
 export enum ChatMessagePingDirection {
