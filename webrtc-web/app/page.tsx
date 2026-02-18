@@ -1427,8 +1427,24 @@ export default function Home() {
   const [searchKw, setSearchKw] = useState<string>("");
 
   const msgsBoxRef = useRef<HTMLDivElement>(null);
-  const { getUnreadMessages, addUnreadMessageIds, unreads } =
-    useUnreads(nodeId);
+  const {
+    getUnreadMessages,
+    addUnreadMessageIds,
+    unreads,
+    updateUnreadMessageIds,
+  } = useUnreads(nodeIdRef);
+
+  useEffect(() => {
+    const it = setInterval(
+      () => updateUnreadMessageIds(getVisibleMessageIds(msgsBoxRef)),
+      1000,
+    );
+    return () => clearInterval(it);
+  }, []);
+
+  const handleScroll = () => {
+    updateUnreadMessageIds(getVisibleMessageIds(msgsBoxRef));
+  };
 
   return (
     <Fragment>
@@ -1646,6 +1662,7 @@ export default function Home() {
             </Paper>
             <Box
               ref={msgsBoxRef}
+              onScroll={handleScroll}
               sx={{
                 flex: 1,
                 minHeight: 0,
