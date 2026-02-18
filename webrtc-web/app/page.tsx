@@ -1453,6 +1453,25 @@ export default function Home() {
                   variant="standard"
                   value={advertisedName}
                   onChange={(e) => setAdvertisedName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (advertisedName.trim() === "") {
+                        return;
+                      }
+                      const server = servers.find(
+                        (server) => server.id === selectedServer,
+                      );
+                      if (server) {
+                        doConnect(
+                          server.url,
+                          advertisedName.trim(),
+                          server.iceServers,
+                        );
+                      }
+                    }
+                  }}
                 />
               </Box>
               <Box
