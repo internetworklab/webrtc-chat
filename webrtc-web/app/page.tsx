@@ -427,7 +427,8 @@ function updateConnTrackStatusByMsgObject(
       (msg) => msg.messageId === msgObject.messageId,
     );
     if (idx === -1) {
-      messages.push(msgObject);
+      // Mark as unread for messages received from remote peers
+      messages.push({ ...msgObject, unread: true });
     }
   }
 
@@ -1128,6 +1129,15 @@ function transmitFileViaPC(
         console.error("failed to send(or ack) message", e);
       });
   };
+}
+
+function getUnreadPeerMessages(
+  ourNodeId: string,
+  messages: ChatMessage[],
+): string[] {
+  return messages
+    .filter((msg) => msg.unread === true && msg.fromNodeId !== ourNodeId)
+    .map((msg) => msg.messageId);
 }
 
 function getVisibleMessageIds(

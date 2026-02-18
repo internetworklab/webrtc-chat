@@ -241,6 +241,10 @@ export type ChatMessage = {
   ack?: ChatMessageACK;
   acked?: boolean;
 
+  // indicates whether this message has been read by the local user
+  // set to true for messages received from remote peers
+  unread?: boolean;
+
   // Plain text message, quite similar to a SMS message body
   message?: string;
 
