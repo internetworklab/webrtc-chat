@@ -106,6 +106,7 @@ function useWs(setConnTrackStatus: Dispatch<SetStateAction<ConnTrackStatus>>) {
     addr: string,
     advertisedName: string,
     iceServers: string[],
+    onUnread: (messageIds: string[]) => void,
   ) => {
     setConnecting(true);
     const ws = new WebSocket(addr);
@@ -242,6 +243,7 @@ function useWs(setConnTrackStatus: Dispatch<SetStateAction<ConnTrackStatus>>) {
                 setConnTrackStatus,
                 remoteNodeId,
                 logSource,
+                onUnread,
               );
               if (dc.label === PredefinedDCLabel.Chat) {
                 ent.dataChannel = dc;
@@ -616,6 +618,7 @@ function attachDCEventListeners(
   setConnTrackStatus: Dispatch<SetStateAction<ConnTrackStatus>>,
   remoteNodeId: string,
   logId: string,
+  onUnread: (msgIds: string[]) => void,
 ) {
   const logSource = logId ? ` [${logId}]` : "";
   dc.onopen = () => {
@@ -696,6 +699,7 @@ function attachDCEventListeners(
             msgObject.fromNodeId,
             msgObject.messageId,
           );
+          onUnread([msgObject.messageId]);
         }
       } catch (e) {
         console.error("failed to parse data channel chat message", e);
@@ -1224,7 +1228,11 @@ export default function Home() {
   const [activeConn, setActiveConn] = useState("");
   const [showChangeName, setShowChangeName] = useState(false);
 
-  const switchActiveConn = (remoteNodeId: string, iceServers: string[]) => {
+  const switchActiveConn = (
+    remoteNodeId: string,
+    iceServers: string[],
+    onUnread: (msgIds: string[]) => void,
+  ) => {
     const logSource = "initiator";
     setActiveConn(remoteNodeId);
 
@@ -1251,6 +1259,7 @@ export default function Home() {
         setConnTrackStatus,
         remoteNodeId,
         logSource,
+        onUnread,
       );
 
       ent.peerConnection
@@ -1418,7 +1427,8 @@ export default function Home() {
   const [searchKw, setSearchKw] = useState<string>("");
 
   const msgsBoxRef = useRef<HTMLDivElement>(null);
-  const { getUnreadMessages } = useUnreads();
+  const { getUnreadMessages, addUnreadMessageIds, unreads } =
+    useUnreads(nodeId);
 
   return (
     <Fragment>
@@ -1486,9 +1496,10 @@ export default function Home() {
                 ).map((conn) => {
                   const peerMessages =
                     connTrackStatus?.[conn.node_id]?.messages ?? [];
-                  const unreadPeerMsgs = peerMessages.filter(
-                    (msg) =>
-                      msg.unread === true && msg.fromNodeId === conn.node_id,
+                  const unreadsSet = new Set(unreads);
+
+                  const unreadPeerMsgs = peerMessages.filter((msg) =>
+                    unreadsSet.has(msg.messageId),
                   );
                   const numUnreads = unreadPeerMsgs.length;
                   const latestUnreadMessage = unreadPeerMsgs.sort(
@@ -1505,7 +1516,11 @@ export default function Home() {
                           (server) => server.id === selectedServer,
                         );
                         if (server) {
-                          switchActiveConn(conn.node_id, server.iceServers);
+                          switchActiveConn(
+                            conn.node_id,
+                            server.iceServers,
+                            addUnreadMessageIds,
+                          );
                         }
                       }}
                       numUnreads={numUnreads}
@@ -1566,6 +1581,7 @@ export default function Home() {
                           server.url,
                           advertisedName.trim(),
                           server.iceServers,
+                          addUnreadMessageIds,
                         );
                       }
                     }
@@ -1591,6 +1607,7 @@ export default function Home() {
                         server.url,
                         advertisedName.trim(),
                         server.iceServers,
+                        addUnreadMessageIds,
                       );
                     }
                   }}

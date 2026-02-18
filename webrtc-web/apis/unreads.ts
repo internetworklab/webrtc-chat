@@ -10,11 +10,11 @@ export type UseUnreadsHookReturn = {
   getUnreadMessages: () => Set<string>;
 };
 
-function doLoad(): string[] {
+function doLoad(nodeId: string): string[] {
   if (typeof window === "undefined") {
     return [];
   }
-  const stored = localStorage.getItem(UNREADS_STORAGE_KEY);
+  const stored = localStorage.getItem(UNREADS_STORAGE_KEY + ":" + nodeId);
   if (!stored) {
     return [];
   }
@@ -27,17 +27,20 @@ function doLoad(): string[] {
 }
 
 // this hook maintains a globally shared pool of unread message IDs.
-export function useUnreads(): UseUnreadsHookReturn {
+// and it serves as the single authority of unread message IDs,
+// any message isn't really unread unless it has been queued into here,
+// any message isn't really read unless it has been removed from here.
+export function useUnreads(nodeId: string): UseUnreadsHookReturn {
   const [unreads, setUnreads] = useState<string[] | undefined>(undefined);
 
   function doStore(unreadMsgIds: string[] | Set<string>) {
     const ids = Array.from(unreadMsgIds);
-    localStorage.setItem(UNREADS_STORAGE_KEY, ids.join(","));
+    localStorage.setItem(UNREADS_STORAGE_KEY + ":" + nodeId, ids.join(","));
     setUnreads(ids);
   }
 
   const getUnreadMessages = (): Set<string> => {
-    return new Set(doLoad());
+    return new Set(doLoad(nodeId));
   };
 
   const addUnreadMessageIds = (unreadMsgIds: string[]) => {
@@ -62,7 +65,7 @@ export function useUnreads(): UseUnreadsHookReturn {
   };
 
   return {
-    unreads: unreads || doLoad(),
+    unreads: unreads || doLoad(nodeId),
     setUnreads: (unreads) => doStore(unreads),
     addUnreadMessageIds,
     updateUnreadMessageIds,
