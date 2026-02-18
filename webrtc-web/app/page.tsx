@@ -1174,6 +1174,45 @@ function getVisibleMessageIds(
   return visibleIds;
 }
 
+function sortConnsByLatestUnread(
+  connEntries: ConnEntry[],
+  connTrackStatus: ConnTrackStatus,
+  ourNodeId: string,
+) {
+  return connEntries.sort((connA, connB) => {
+    const messagesA = connTrackStatus[connA.node_id]?.messages ?? [];
+    const messagesB = connTrackStatus[connB.node_id]?.messages ?? [];
+
+    // Get unread messages for each connection (messages from the remote peer that are unread)
+    const unreadA = messagesA.filter(
+      (msg) => msg.unread === true && msg.fromNodeId !== ourNodeId,
+    );
+    const unreadB = messagesB.filter(
+      (msg) => msg.unread === true && msg.fromNodeId !== ourNodeId,
+    );
+
+    // If connA has unread messages and connB doesn't, connA comes first
+    if (unreadA.length > 0 && unreadB.length === 0) {
+      return -1;
+    }
+
+    // If connB has unread messages and connA doesn't, connB comes first
+    if (unreadB.length > 0 && unreadA.length === 0) {
+      return 1;
+    }
+
+    // If both have unread messages, compare the latest unread message timestamp
+    if (unreadA.length > 0 && unreadB.length > 0) {
+      const latestA = Math.max(...unreadA.map((msg) => msg.timestamp));
+      const latestB = Math.max(...unreadB.map((msg) => msg.timestamp));
+      return latestB - latestA; // Newer messages first
+    }
+
+    // Neither has unread messages, maintain original order
+    return 0;
+  });
+}
+
 export default function Home() {
   const [connTrackStatus, setConnTrackStatus] = useState<ConnTrackStatus>({});
 
@@ -1454,42 +1493,45 @@ export default function Home() {
                 />
               </Box>
               <Box>
-                {conns
-                  .filter((conn) => conn.node_id !== nodeId)
-                  .filter(
-                    (conn) =>
-                      !searchKw || conn.entry?.node_name?.includes(searchKw),
-                  )
-                  .map((conn) => {
-                    const peerMessages =
-                      connTrackStatus?.[conn.node_id]?.messages ?? [];
-                    const unreadPeerMsgs = peerMessages.filter(
-                      (msg) =>
-                        msg.unread === true && msg.fromNodeId === conn.node_id,
-                    );
-                    const numUnreads = unreadPeerMsgs.length;
-                    const latestUnreadMessage = unreadPeerMsgs.sort(
-                      (a, b) => b.timestamp - a.timestamp,
-                    )[0];
-                    return (
-                      <RenderPeerEntry
-                        conn={conn}
-                        avatarUrl={connTrackStatus?.[conn.node_id]?.avatarUrl}
-                        key={conn.node_id}
-                        activeNodeId={activeConn}
-                        onSelect={() => {
-                          const server = servers.find(
-                            (server) => server.id === selectedServer,
-                          );
-                          if (server) {
-                            switchActiveConn(conn.node_id, server.iceServers);
-                          }
-                        }}
-                        numUnreads={numUnreads}
-                        latestUnreadMessage={latestUnreadMessage}
-                      />
-                    );
-                  })}
+                {sortConnsByLatestUnread(
+                  conns
+                    .filter((conn) => conn.node_id !== nodeId)
+                    .filter(
+                      (conn) =>
+                        !searchKw || conn.entry?.node_name?.includes(searchKw),
+                    ),
+                  connTrackStatus,
+                  nodeId,
+                ).map((conn) => {
+                  const peerMessages =
+                    connTrackStatus?.[conn.node_id]?.messages ?? [];
+                  const unreadPeerMsgs = peerMessages.filter(
+                    (msg) =>
+                      msg.unread === true && msg.fromNodeId === conn.node_id,
+                  );
+                  const numUnreads = unreadPeerMsgs.length;
+                  const latestUnreadMessage = unreadPeerMsgs.sort(
+                    (a, b) => b.timestamp - a.timestamp,
+                  )[0];
+                  return (
+                    <RenderPeerEntry
+                      conn={conn}
+                      avatarUrl={connTrackStatus?.[conn.node_id]?.avatarUrl}
+                      key={conn.node_id}
+                      activeNodeId={activeConn}
+                      onSelect={() => {
+                        const server = servers.find(
+                          (server) => server.id === selectedServer,
+                        );
+                        if (server) {
+                          switchActiveConn(conn.node_id, server.iceServers);
+                        }
+                      }}
+                      numUnreads={numUnreads}
+                      latestUnreadMessage={latestUnreadMessage}
+                    />
+                  );
+                })}
               </Box>
             </Box>
           ) : (
