@@ -897,6 +897,38 @@ const servers: WSServer[] = [
   },
 ];
 
+// onAck will always get called, regardless of whether there is an error or timeout.
+function listenForAck(
+  dc: RTCDataChannel,
+  msgId: string,
+  timeoutMs: number,
+  onAck: (timeout: boolean, error?: Error) => void,
+) {
+  const evListenerId = crypto.randomUUID();
+  const timeoutId = setTimeout(() => {
+    onAck(true);
+  }, timeoutMs);
+  const evListener = (ev: any) => {
+    console.log(
+      "[dbg] [ack] ev handler of id",
+      evListenerId,
+      "was called with data",
+      ev.data,
+    );
+    try {
+      const evData = JSON.parse(ev.data) as any as ChatMessage;
+      if (evData.ack && evData.ack.messageId === msgId) {
+        onAck(false, undefined);
+      }
+      clearTimeout(timeoutId);
+    } catch (error) {
+      onAck(false, error as Error);
+    }
+    dc.removeEventListener("message", evListener);
+  };
+  dc.addEventListener("message", evListener);
+}
+
 export default function Home() {
   const [connTrackStatus, setConnTrackStatus] = useState<ConnTrackStatus>({});
 
@@ -1533,20 +1565,25 @@ export default function Home() {
                   sendMsg(msgObject, activeConn);
                   const dc = connTrackRef.current?.[activeConn]?.dataChannel;
                   if (dc) {
-                    const evListenerId = crypto.randomUUID();
-                    const evListener = (ev: any) => {
-                      console.log(
-                        "[dbg] named data event",
-                        ev.data,
-                        "from handler",
-                        evListenerId,
-                      );
-                      dc.removeEventListener("message", evListener);
-                    };
-                    dc.addEventListener("message", evListener);
                     console.log(
-                      "[dbg] added data event listener",
-                      evListenerId,
+                      "[dbg] [ack] waiting for ack of message",
+                      msgObject.messageId,
+                    );
+                    listenForAck(
+                      dc,
+                      msgObject.messageId,
+                      3000,
+                      (timeout, err) => {
+                        console.log(
+                          "[dbg] [ack] message",
+                          msgObject.messageId,
+                          "was acked",
+                          "timeout",
+                          timeout,
+                          "error",
+                          err,
+                        );
+                      },
                     );
                   }
                 }}
