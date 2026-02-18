@@ -217,6 +217,7 @@ export function RenderMessage(props: {
 
   return (
     <Box
+      data-message-id={message.messageId}
       sx={{
         display: "flex",
         flexDirection: "row",

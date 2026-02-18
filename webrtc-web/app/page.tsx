@@ -39,6 +39,7 @@ import {
   Fragment,
   RefObject,
   SetStateAction,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -1129,6 +1130,39 @@ function transmitFileViaPC(
   };
 }
 
+function getVisibleMessageIds(
+  msgsBoxRef: RefObject<HTMLDivElement | null>,
+): string[] {
+  const visibleIds: string[] = [];
+  const msgsBox = msgsBoxRef.current;
+  if (!msgsBox) {
+    return visibleIds;
+  }
+
+  const scrollTop = msgsBox.scrollTop;
+  const containerViewPortHeight = msgsBox.clientHeight;
+  const messageElements = msgsBox.querySelectorAll("[data-message-id]");
+
+  messageElements.forEach((el) => {
+    const htmlEl = el as HTMLElement;
+    const messageId = htmlEl.getAttribute("data-message-id");
+    const relativeOffset = htmlEl.offsetTop;
+    const isVisible =
+      relativeOffset >= scrollTop &&
+      relativeOffset < scrollTop + containerViewPortHeight;
+
+    // console.log(
+    //   `[dbg] message ${messageId}: offset=${relativeOffset.toFixed(2)}px, scrollTop=${scrollTop.toFixed(2)}px, containerHeight=${containerViewPortHeight.toFixed(2)}px, visible=${isVisible}`,
+    // );
+
+    if (isVisible && messageId) {
+      visibleIds.push(messageId);
+    }
+  });
+
+  return visibleIds;
+}
+
 export default function Home() {
   const [connTrackStatus, setConnTrackStatus] = useState<ConnTrackStatus>({});
 
@@ -1294,10 +1328,156 @@ export default function Home() {
   };
 
   // for messages sent by ourselves, it has to be acked before it can appear on the screen.
-  const messages: ChatMessage[] =
+  const realMessages: ChatMessage[] =
     connTrackStatus[activeConn]?.messages?.filter(
       (msg) => msg.acked || msg.fromNodeId !== nodeId,
     ) ?? [];
+
+  // Mock data for testing - remove this block in production
+  const mockRemoteNodeId = "mock-remote-user-12345";
+  const mockMessages: ChatMessage[] = [
+    {
+      messageId: "msg-001",
+      fromNodeId: mockRemoteNodeId,
+      toNodeId: nodeId ?? "local-user",
+      timestamp: 1700000000000,
+      message: "Hey! How are you doing today?",
+    },
+    {
+      messageId: "msg-002",
+      fromNodeId: nodeId ?? "local-user",
+      toNodeId: mockRemoteNodeId,
+      timestamp: 1700000100000,
+      message: "I'm doing great, thanks for asking! How about you?",
+      acked: true,
+    },
+    {
+      messageId: "msg-003",
+      fromNodeId: mockRemoteNodeId,
+      toNodeId: nodeId ?? "local-user",
+      timestamp: 1700000200000,
+      message: "Pretty good! Just working on this WebRTC project.",
+    },
+    {
+      messageId: "msg-004",
+      fromNodeId: nodeId ?? "local-user",
+      toNodeId: mockRemoteNodeId,
+      timestamp: 1700000300000,
+      message: "Nice! WebRTC is really interesting technology.",
+      acked: true,
+    },
+    {
+      messageId: "msg-005",
+      fromNodeId: mockRemoteNodeId,
+      toNodeId: nodeId ?? "local-user",
+      timestamp: 1700000400000,
+      message:
+        "Yeah, the peer-to-peer communication is amazing.\nEspecially for real-time applications.",
+    },
+    {
+      messageId: "msg-006",
+      fromNodeId: nodeId ?? "local-user",
+      toNodeId: mockRemoteNodeId,
+      timestamp: 1700000500000,
+      message:
+        "Absolutely! The signaling server we built handles all the connection setup.",
+      acked: true,
+    },
+    {
+      messageId: "msg-007",
+      fromNodeId: mockRemoteNodeId,
+      toNodeId: nodeId ?? "local-user",
+      timestamp: 1700000600000,
+      message: "That's cool. What stack did you use for the backend?",
+    },
+    {
+      messageId: "msg-008",
+      fromNodeId: nodeId ?? "local-user",
+      toNodeId: mockRemoteNodeId,
+      timestamp: 1700000700000,
+      message:
+        "We used Go with the gorilla/websocket library.\nIt's been working really well so far.",
+      acked: true,
+    },
+    {
+      messageId: "msg-009",
+      fromNodeId: mockRemoteNodeId,
+      toNodeId: nodeId ?? "local-user",
+      timestamp: 1700000800000,
+      message: "Go is excellent for concurrent connections. Good choice!",
+    },
+    {
+      messageId: "msg-010",
+      fromNodeId: nodeId ?? "local-user",
+      toNodeId: mockRemoteNodeId,
+      timestamp: 1700000900000,
+      message:
+        "Thanks! The actor pattern for thread-safe map access was fun to implement.",
+      acked: true,
+    },
+    {
+      messageId: "msg-011",
+      fromNodeId: mockRemoteNodeId,
+      toNodeId: nodeId ?? "local-user",
+      timestamp: 1700001000000,
+      message:
+        "I've heard about that pattern. It serializes all operations through a single goroutine, right?",
+    },
+    {
+      messageId: "msg-012",
+      fromNodeId: nodeId ?? "local-user",
+      toNodeId: mockRemoteNodeId,
+      timestamp: 1700001100000,
+      message: "Exactly! No mutex contention and clean separation of concerns.",
+      acked: true,
+    },
+    {
+      messageId: "msg-013",
+      fromNodeId: mockRemoteNodeId,
+      toNodeId: nodeId ?? "local-user",
+      timestamp: 1700001200000,
+      message:
+        "That's a great architectural decision.\n\nBy the way, have you tested the scroll behavior yet?",
+    },
+    {
+      messageId: "msg-014",
+      fromNodeId: nodeId ?? "local-user",
+      toNodeId: mockRemoteNodeId,
+      timestamp: 1700001300000,
+      message:
+        "Yes! We added data-message-id attributes to each message block.\nNow we can track scroll offsets for debugging.",
+      acked: true,
+    },
+    {
+      messageId: "msg-015",
+      fromNodeId: mockRemoteNodeId,
+      toNodeId: nodeId ?? "local-user",
+      timestamp: 1700001400000,
+      message:
+        "That's smart. You can use those for scrolling to specific messages later.",
+    },
+    {
+      messageId: "msg-016",
+      fromNodeId: nodeId ?? "local-user",
+      toNodeId: mockRemoteNodeId,
+      timestamp: 1700001500000,
+      message:
+        "Exactly! And for testing, we can verify the scroll positions are calculated correctly.",
+      acked: true,
+    },
+    {
+      messageId: "msg-017",
+      fromNodeId: mockRemoteNodeId,
+      toNodeId: nodeId ?? "local-user",
+      timestamp: 1700001600000,
+      message:
+        "This mock data should be enough to test the scroll offset logging.\nLet me know if you need more messages!",
+    },
+  ];
+
+  // Use mock messages if no real messages exist (for testing)
+  const messages: ChatMessage[] =
+    realMessages.length > 0 ? realMessages : mockMessages;
 
   const sendAmendMsg = (amendMsgObject: ChatMessage) => {
     const msgToSend: ChatMessage = {
@@ -1346,6 +1526,14 @@ export default function Home() {
   const [selectedServer, setSelectedServer] = useState<string>(servers[0].id);
   const [advertisedName, setAdvertisedName] = useState<string>("");
   const [searchKw, setSearchKw] = useState<string>("");
+
+  const msgsBoxRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    console.log("[dbg] messages changed");
+    const visibleIds = getVisibleMessageIds(msgsBoxRef);
+    console.log("[dbg] visible message IDs:", visibleIds);
+  }, [messages]);
 
   return (
     <Fragment>
@@ -1538,6 +1726,7 @@ export default function Home() {
               <Box>{activeConn ? usernameMap[activeConn] : ""}</Box>
             </Paper>
             <Box
+              ref={msgsBoxRef}
               sx={{
                 flex: 1,
                 minHeight: 0,
@@ -1546,6 +1735,7 @@ export default function Home() {
                 flexDirection: "column",
                 gap: 1,
                 padding: 2,
+                position: "relative",
               }}
             >
               {messages.map((message) => (
