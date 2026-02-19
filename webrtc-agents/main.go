@@ -11,20 +11,26 @@ import (
 
 	pkgconnreg "example.com/webrtcserver/pkg/connreg"
 	pkgframing "example.com/webrtcserver/pkg/framing"
+	"github.com/alecthomas/kong"
 	"github.com/gorilla/websocket"
 )
 
-const (
-	wsServer   = "ws://localhost:3001/ws"
-	nodeName   = "webrtc-agent-1"
-	pingPeriod = 5 * time.Second
-)
+var cli struct {
+	WsServer          string `name:"ws-server" help:"WebSocket server URL" default:"ws://localhost:3001/ws"`
+	NodeName          string `name:"node-name" help:"Node name for registration" default:"webrtc-agent-1"`
+	PingPeriodSeconds int    `name:"ping-period-seconds" help:"Ping period in seconds" default:"5"`
+}
 
 func main() {
+	ctx := kong.Parse(&cli)
+	_ = ctx
+
+	pingPeriod := time.Duration(cli.PingPeriodSeconds) * time.Second
+
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
 
-	u, err := url.Parse(wsServer)
+	u, err := url.Parse(cli.WsServer)
 	if err != nil {
 		log.Fatal("Failed to parse WebSocket URL:", err)
 	}
@@ -69,7 +75,7 @@ func main() {
 	// Send registration message
 	registerMsg := pkgframing.MessagePayload{
 		Register: &pkgconnreg.RegisterPayload{
-			NodeName: nodeName,
+			NodeName: cli.NodeName,
 		},
 	}
 	registerData, err := json.Marshal(registerMsg)
@@ -81,7 +87,7 @@ func main() {
 	if err != nil {
 		log.Fatal("Failed to send registration:", err)
 	}
-	log.Printf("Sent registration message for node: %s", nodeName)
+	log.Printf("Sent registration message for node: %s", cli.NodeName)
 
 	// Ticker for sending ping messages
 	ticker := time.NewTicker(pingPeriod)
