@@ -5,6 +5,7 @@ import {
   ChatMessageFile,
   ChatMessageFileCategory,
   FileTransferStatusEntry,
+  Preference,
 } from "@/apis/types";
 import { InsertDriveFile } from "@mui/icons-material";
 import {
@@ -283,11 +284,14 @@ export function RenderMessage(props: {
   onAmend?: (amendedMsg: ChatMessage) => void;
   onDelete?: (deletedMsgId: string) => void;
   fileTransferStatus: Record<string, FileTransferStatusEntry>;
-  usernameMap: Record<string, string>;
+  userPreferenceMap: Record<string, Preference>;
 }) {
   // todo: add message edit feature and delete feature in context menu
-  const { message, onAmend, onDelete, fileTransferStatus, usernameMap } = props;
-  const username = usernameMap[message.fromNodeId] ?? "";
+  const { message, onAmend, onDelete, fileTransferStatus, userPreferenceMap } =
+    props;
+  const peername = userPreferenceMap[message.fromNodeId]?.name ?? "";
+  const peercoloridxprefer =
+    userPreferenceMap[message.fromNodeId]?.indexOfPreferColor ?? -1;
 
   return (
     <Box
@@ -300,7 +304,10 @@ export function RenderMessage(props: {
         width: "max-content",
       }}
     >
-      <RenderAvatar username={username} />
+      <RenderAvatar
+        username={peername}
+        preferredColorIdx={peercoloridxprefer}
+      />
       <Box
         sx={{
           gap: 1,
@@ -314,7 +321,7 @@ export function RenderMessage(props: {
           overflow: "hidden",
         }}
       >
-        {username && <Box sx={{ paddingLeft: 1 }}>{username}</Box>}
+        {peername && <Box sx={{ paddingLeft: 1 }}>{peername}</Box>}
         <Card
           sx={{
             gap: 1,

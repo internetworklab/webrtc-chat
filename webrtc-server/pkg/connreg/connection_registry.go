@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strconv"
 	"sync"
 	"time"
 
@@ -50,9 +51,14 @@ type ICEOfferPayload struct {
 	ToNodeId   string `json:"to_node_id"`
 }
 
+type UserPreference struct {
+	Name             string `json:"name,omitempty"`
+	IdxOfPreferColor *int   `json:"indexOfPreferColor,omitempty"`
+}
+
 type RenamePayload struct {
-	NewNodeName    string `json:"new_node_name"`
-	OriginNodeName string `json:"origin_node_name,omitempty"`
+	NewPreference  UserPreference `json:"new_preference"`
+	OriginNodeName string         `json:"origin_node_name,omitempty"`
 }
 
 type EchoPayload struct {
@@ -77,6 +83,8 @@ func (echopayload *EchoPayload) CalculateDelays(now time.Time) (rtt time.Duratio
 }
 
 type ConnectionAttributes map[string]string
+
+const WellKnownAttributePreferColorIdx = "preferred_color"
 
 type AuthenticationType string
 
@@ -200,13 +208,16 @@ func (cr *ConnRegistry) UpdateHeartbeat(key string) error {
 	return nil
 }
 
-func (cr *ConnRegistry) Rename(key string, payload RenamePayload) (string, error) {
+func (cr *ConnRegistry) UpdatePreference(key string, payload RenamePayload) (string, error) {
 	var originName *string = new(string)
 	*originName = ""
 	_, found := cr.datastore.Get(key, func(valany interface{}) error {
 		entry := valany.(*ConnRegistryData)
 		*originName = *entry.NodeName
-		entry.NodeName = &payload.NewNodeName
+		entry.NodeName = &payload.NewPreference.Name
+		if payload.NewPreference.IdxOfPreferColor != nil {
+			entry.Attributes[WellKnownAttributePreferColorIdx] = strconv.Itoa(*payload.NewPreference.IdxOfPreferColor)
+		}
 		return nil
 	})
 	if !found {

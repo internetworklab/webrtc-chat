@@ -10,7 +10,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import CheckIcon from "@mui/icons-material/Check";
+import { Preference } from "@/apis/types";
 import { Dispatch, SetStateAction, useState } from "react";
 
 type ColorToken = {
@@ -31,20 +31,50 @@ export const PRESET_COLORS: ColorToken[] = [
   { light: "#FFCC80", dark: "#FF9800" }, // Orange
 ];
 
-export type Preference = {
-  name: string;
-  indexOfPreferColor: number;
-};
+export function getRealColorTokenIdx(
+  idx: number | string | undefined | null,
+  tokens: ColorToken[],
+): number {
+  if (idx === undefined || idx === null || idx === "") {
+    return -1;
+  }
+  if (typeof idx === "string") {
+    try {
+      let parsedIdx = parseInt(idx, 10);
+      if (isNaN(parsedIdx)) {
+        parsedIdx = -1;
+      }
+      return parsedIdx;
+    } catch (e) {
+      console.error("failed to parse color idx:", e);
+    }
+    return -1;
+  }
+  return (idx + tokens.length) % tokens.length;
+}
+
+export function getPreferredColor(
+  idx: number | string | undefined | null,
+  tokens: ColorToken[] = PRESET_COLORS,
+): ColorToken {
+  return tokens[getRealColorTokenIdx(idx, tokens)];
+}
 
 export function ChangePreference(props: {
   value: Preference;
   onChange: Dispatch<SetStateAction<Preference>>;
+  options?: ColorToken[];
   open: boolean;
   onClose: () => void;
-  onConfirm: (name: string) => Promise<void>;
+  onConfirm: (newPreference: Preference) => Promise<void>;
 }) {
   const { value, onChange, open, onClose, onConfirm } = props;
-  const { name, indexOfPreferColor } = value;
+  const { name } = value;
+  const colors = props.options || PRESET_COLORS;
+  const indexOfPreferColor = getRealColorTokenIdx(
+    value.indexOfPreferColor,
+    colors,
+  );
   const onNameChange = (name: string) => {
     onChange({ ...value, name });
   };
@@ -112,7 +142,7 @@ export function ChangePreference(props: {
             variant="contained"
             onClick={() => {
               setWaiting(true);
-              onConfirm(name).finally(() => {
+              onConfirm(value).finally(() => {
                 setWaiting(false);
               });
             }}

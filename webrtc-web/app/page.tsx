@@ -21,9 +21,14 @@ import {
   RegisterPayload,
   RenamePayload,
   SDPOfferPayload,
+  WellKnownAttributes,
+  Preference,
   WSServer,
 } from "@/apis/types";
-import { ChangePreference, Preference } from "@/components/ChangePreference";
+import {
+  ChangePreference,
+  getPreferredColor,
+} from "@/components/ChangePreference";
 import {
   Box,
   Button,
@@ -104,9 +109,9 @@ function useWs(setConnTrackStatus: Dispatch<SetStateAction<ConnTrackStatus>>) {
 
   const doConnect = (
     addr: string,
-    advertisedName: string,
     iceServers: string[],
     onUnread: (messageIds: string[]) => void,
+    preference: Preference,
   ) => {
     setConnecting(true);
     const ws = new WebSocket(addr);
@@ -117,10 +122,16 @@ function useWs(setConnTrackStatus: Dispatch<SetStateAction<ConnTrackStatus>>) {
       setConnected(true);
       setConnecting(false);
       const registerPayload: RegisterPayload = {
-        node_name: advertisedName,
+        node_name: preference.name,
       };
       const registerMsg: MessagePayload = {
         register: registerPayload,
+        attributes_announcement: {
+          attributes: {
+            [WellKnownAttributes.PreferredColor]:
+              preference.indexOfPreferColor.toString(),
+          },
+        },
       };
       ws.send(JSON.stringify(registerMsg));
 
@@ -877,22 +888,36 @@ function attachPeerConnectionEventListeners(
   };
 }
 
-function getUsernameMap(
+function tryParseInt(s: string): number {
+  try {
+    const n = parseInt(s);
+    if (isNaN(n)) {
+      return -1;
+    }
+    return n;
+  } catch (e) {
+    console.error("failed to parse int:", s, e);
+  }
+  return -1;
+}
+
+function getUserPreferenceMap(
   conns: ConnEntry[],
   selfNodeId: string,
-): Record<string, string> {
-  let usernameMap: Record<string, string> = {};
+): Record<string, Preference> {
+  let userPreferenceMap: Record<string, Preference> = {};
   for (const conn of conns ?? []) {
     if (conn.entry?.node_name) {
-      usernameMap[conn.node_id] = conn.entry.node_name;
+      userPreferenceMap[conn.node_id] = {
+        name: conn.entry.node_name,
+        indexOfPreferColor: tryParseInt(
+          conn.entry?.attributes?.[WellKnownAttributes.PreferredColor] ?? "",
+        ),
+      };
     }
   }
 
-  // for test purpose
-  if (!(selfNodeId in usernameMap)) {
-    usernameMap[selfNodeId] = "Me";
-  }
-  return usernameMap;
+  return userPreferenceMap;
 }
 
 const servers: WSServer[] = [
@@ -1265,10 +1290,11 @@ export default function Home() {
 
   const [preference, setPreference] = useState<Preference>({
     name: "",
-    indexOfPreferColor: 0,
+    indexOfPreferColor: -1,
   });
   const [activeConn, setActiveConn] = useState("");
-  const [showChangeName, setShowChangeName] = useState(false);
+  const activeConnEntry = conns?.find((conn) => conn.node_id == activeConn);
+  const [showPreferenceDialog, setShowPreferenceDialog] = useState(false);
 
   const switchActiveConn = (
     remoteNodeId: string,
@@ -1463,9 +1489,8 @@ export default function Home() {
     }
   };
 
-  const usernameMap = getUsernameMap(conns ?? [], nodeId ?? "");
+  const userPreferenceMap = getUserPreferenceMap(conns ?? [], nodeId ?? "");
   const [selectedServer, setSelectedServer] = useState<string>(servers[0].id);
-  const [advertisedName, setAdvertisedName] = useState<string>("");
   const [searchKw, setSearchKw] = useState<string>("");
 
   const msgsBoxRef = useRef<HTMLDivElement>(null);
@@ -1538,7 +1563,11 @@ export default function Home() {
                   paddingBottom: 0,
                 }}
               >
-                <RenderAvatar username={name ?? ""} size="large" />
+                <RenderAvatar
+                  username={name ?? ""}
+                  size="large"
+                  preferredColorIdx={preference.indexOfPreferColor}
+                />
                 <Box
                   sx={{
                     display: "flex",
@@ -1561,7 +1590,7 @@ export default function Home() {
                           ...prev,
                           name: name || prev.name,
                         }));
-                        setShowChangeName(true);
+                        setShowPreferenceDialog(true);
                       }}
                     >
                       <Edit fontSize="small" />
@@ -1595,6 +1624,13 @@ export default function Home() {
                     conn.node_id,
                     unreadsSet,
                   );
+                  const preferredColorIdxS =
+                    conn.entry?.attributes?.[
+                      WellKnownAttributes.PreferredColor
+                    ];
+                  const preferredColorIdx = !!preferredColorIdxS
+                    ? parseInt(preferredColorIdxS)
+                    : undefined;
 
                   const numUnreads = unreadPeerMsgs.length;
                   const latestUnreadMessage = unreadPeerMsgs.sort(
@@ -1602,6 +1638,7 @@ export default function Home() {
                   )[0];
                   return (
                     <RenderPeerEntry
+                      preferredColorIdx={preferredColorIdx}
                       conn={conn}
                       avatarUrl={connTrackStatus?.[conn.node_id]?.avatarUrl}
                       key={conn.node_id}
@@ -1659,24 +1696,23 @@ export default function Home() {
                 <TextField
                   fullWidth
                   variant="standard"
-                  value={advertisedName}
-                  onChange={(e) => setAdvertisedName(e.target.value)}
+                  value={preference.name}
+                  onChange={(e) =>
+                    setPreference({ ...preference, name: e.target.value })
+                  }
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
                       e.stopPropagation();
-                      if (advertisedName.trim() === "") {
-                        return;
-                      }
                       const server = servers.find(
                         (server) => server.id === selectedServer,
                       );
                       if (server) {
                         doConnect(
                           server.url,
-                          advertisedName.trim(),
                           server.iceServers,
                           addUnreadMessageIds,
+                          preference,
                         );
                       }
                     }
@@ -1689,20 +1725,16 @@ export default function Home() {
                 <Button
                   variant="contained"
                   loading={connecting}
-                  disabled={advertisedName.trim() === ""}
                   onClick={() => {
-                    if (advertisedName.trim() === "") {
-                      return;
-                    }
                     const server = servers.find(
                       (server) => server.id === selectedServer,
                     );
                     if (server) {
                       doConnect(
                         server.url,
-                        advertisedName.trim(),
                         server.iceServers,
                         addUnreadMessageIds,
+                        preference,
                       );
                     }
                   }}
@@ -1734,10 +1766,13 @@ export default function Home() {
               }}
             >
               <RenderAvatar
-                username={activeConn ? usernameMap[activeConn] : ""}
+                username={activeConn ? userPreferenceMap[activeConn]?.name : ""}
                 size="small"
+                preferredColorIdx={
+                  userPreferenceMap[activeConn]?.indexOfPreferColor ?? -1
+                }
               />
-              <Box>{activeConn ? usernameMap[activeConn] : ""}</Box>
+              <Box>{activeConn ? userPreferenceMap[activeConn]?.name : ""}</Box>
             </Paper>
             <Box
               ref={msgsBoxRef}
@@ -1766,7 +1801,7 @@ export default function Home() {
                   fileTransferStatus={
                     connTrackStatus?.[activeConn]?.fileTransferStatus ?? {}
                   }
-                  usernameMap={usernameMap}
+                  userPreferenceMap={userPreferenceMap}
                 />
               ))}
             </Box>
@@ -1869,14 +1904,14 @@ export default function Home() {
       <ChangePreference
         value={preference}
         onChange={setPreference}
-        open={showChangeName}
+        open={showPreferenceDialog}
         onClose={() => {
-          setShowChangeName(false);
+          setShowPreferenceDialog(false);
         }}
-        onConfirm={(newName) => {
+        onConfirm={(newPreference) => {
           return new Promise((resolve) => {
             const renamePayload: RenamePayload = {
-              new_node_name: newName,
+              new_preference: newPreference,
               origin_node_name: name,
             };
             const renameMsg: MessagePayload = {
@@ -1885,7 +1920,7 @@ export default function Home() {
             wsRef.current?.send(JSON.stringify(renameMsg));
 
             resolve();
-            setShowChangeName(false);
+            setShowPreferenceDialog(false);
           });
         }}
       />

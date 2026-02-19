@@ -131,14 +131,14 @@ func (handler *WebsocketHandler) handleTextMessage(key string, conn *websocket.C
 		cr.SetAttributes(key, payload.AttributesAnnouncement)
 	}
 	if payload.Rename != nil {
-		originName, err := cr.Rename(key, *payload.Rename)
+		originName, err := cr.UpdatePreference(key, *payload.Rename)
 		if err != nil {
 			return fmt.Errorf("failed to rename connection from %s: %v", key, err)
 		}
 		responsePayload := pkgframing.MessagePayload{
 			Rename: &pkgconnreg.RenamePayload{
 				OriginNodeName: originName,
-				NewNodeName:    payload.Rename.NewNodeName,
+				NewPreference:  payload.Rename.NewPreference,
 			},
 		}
 		if err := handler.sendBroadcastMsg(responsePayload); err != nil {

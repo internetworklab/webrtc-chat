@@ -1,12 +1,20 @@
-// type ConnectionAttributes map[string]string
-export type ConnectionAttributes = Record<string, string>;
+export enum WellKnownAttributes {
+  PreferredColor = "preferred_color",
+}
+
+export type ConnectionAttributes = Record<WellKnownAttributes, string>;
+
+export type Preference = {
+  name: string;
+  indexOfPreferColor: number;
+};
 
 // type RenamePayload struct {
 // 	NewNodeName    string `json:"new_node_name"`
 // 	OriginNodeName string `json:"origin_node_name,omitempty"`
 // }
 export interface RenamePayload {
-  new_node_name: string;
+  new_preference: Preference;
   origin_node_name?: string;
 }
 

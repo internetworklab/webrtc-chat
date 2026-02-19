@@ -42,6 +42,7 @@ function getMessagePreview(msg: ChatMessage, maxChars: number = 50): string {
 
 export function RenderPeerEntry(props: {
   conn: ConnEntry;
+  preferredColorIdx?: number;
   avatarUrl?: string;
   activeNodeId: string;
   onSelect: () => void;
@@ -57,6 +58,7 @@ export function RenderPeerEntry(props: {
     rtt,
     latestUnreadMessage,
     numUnreads,
+    preferredColorIdx,
   } = props;
   const hasUnreads = numUnreads !== undefined && numUnreads > 0;
 
@@ -87,6 +89,7 @@ export function RenderPeerEntry(props: {
         <RenderAvatar
           username={conn.entry?.node_name || conn.node_id}
           url={avatarUrl}
+          preferredColorIdx={preferredColorIdx}
         />
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography
