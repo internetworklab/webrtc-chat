@@ -1203,6 +1203,19 @@ function sortConnsByLatestUnread(
   });
 }
 
+function getPeerUnreadMsgs(
+  connTrackStatus: ConnTrackStatus,
+  peerId: string,
+  unreadSet: Set<string>,
+): ChatMessage[] {
+  const peerMessages = connTrackStatus?.[peerId]?.messages ?? [];
+
+  const unreadPeerMsgs = peerMessages.filter((msg) =>
+    unreadSet.has(msg.messageId),
+  );
+  return unreadPeerMsgs;
+}
+
 export default function Home() {
   const [connTrackStatus, setConnTrackStatus] = useState<ConnTrackStatus>({});
 
@@ -1434,6 +1447,29 @@ export default function Home() {
     updateUnreadMessageIds,
   } = useUnreads(nodeIdRef);
 
+  // todo: set on/off following mode in certain cases
+  const followingModeRef = useRef(false);
+
+  // scroll to last message when following mode is on
+  useEffect(() => {
+    const mutObs = new MutationObserver((mutations) => {
+      if (followingModeRef.current) {
+        for (const mutation of mutations) {
+          if (mutation.type === "childList") {
+            if (mutation.addedNodes.length > 0) {
+              (mutation.addedNodes[0] as HTMLDivElement).scrollIntoView?.();
+            }
+          }
+        }
+      }
+    });
+
+    if (msgsBoxRef.current) {
+      mutObs.observe(msgsBoxRef.current, { childList: true });
+      return () => mutObs.disconnect();
+    }
+  }, [activeConn]);
+
   useEffect(() => {
     const it = setInterval(
       () => updateUnreadMessageIds(getVisibleMessageIds(msgsBoxRef)),
@@ -1510,13 +1546,13 @@ export default function Home() {
                   connTrackStatus,
                   getUnreadMessages(),
                 ).map((conn) => {
-                  const peerMessages =
-                    connTrackStatus?.[conn.node_id]?.messages ?? [];
                   const unreadsSet = new Set(unreads);
-
-                  const unreadPeerMsgs = peerMessages.filter((msg) =>
-                    unreadsSet.has(msg.messageId),
+                  const unreadPeerMsgs = getPeerUnreadMsgs(
+                    connTrackStatus,
+                    conn.node_id,
+                    unreadsSet,
                   );
+
                   const numUnreads = unreadPeerMsgs.length;
                   const latestUnreadMessage = unreadPeerMsgs.sort(
                     (a, b) => b.timestamp - a.timestamp,
