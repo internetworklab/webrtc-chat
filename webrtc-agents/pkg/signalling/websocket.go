@@ -6,9 +6,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
-	"time"
 
-	pkgconnreg "example.com/webrtcserver/pkg/connreg"
 	pkgframing "example.com/webrtcserver/pkg/framing"
 
 	"github.com/gorilla/websocket"
@@ -61,20 +59,6 @@ func (p *WebSocketProxy) Receive() <-chan pkgframing.MessagePayload {
 	return p.receiveChan
 }
 
-// GetNodeID returns the current node ID
-func (p *WebSocketProxy) GetNodeID() string {
-	p.nodeIDMu.RLock()
-	defer p.nodeIDMu.RUnlock()
-	return p.nodeID
-}
-
-// SetNodeID sets the node ID after registration
-func (p *WebSocketProxy) SetNodeID(nodeID string) {
-	p.nodeIDMu.Lock()
-	defer p.nodeIDMu.Unlock()
-	p.nodeID = nodeID
-}
-
 // Close closes the WebSocket proxy and stops all goroutines
 func (p *WebSocketProxy) Close() error {
 	close(p.done)
@@ -119,16 +103,6 @@ func (p *WebSocketProxy) readLoop() {
 				continue
 			}
 
-			// Handle pong messages internally
-			if payload.Echo != nil && payload.Echo.Direction == pkgconnreg.EchoDirectionS2C {
-				if p.debug {
-					rtt := time.Since(time.UnixMilli(int64(payload.Echo.Timestamp)))
-					log.Printf("Pong received - RTT: %v, CorrelationID: %s, SeqID: %d",
-						rtt, payload.Echo.CorrelationID, payload.Echo.SeqID)
-				}
-				continue
-			}
-
 			// Send to receive channel
 			select {
 			case p.receiveChan <- payload:
@@ -164,43 +138,4 @@ func (p *WebSocketProxy) writeLoop() {
 			}
 		}
 	}
-}
-
-// StartPing starts a ping goroutine that sends periodic pings
-func (p *WebSocketProxy) StartPing(ctx context.Context, period time.Duration) {
-	go func() {
-		ticker := time.NewTicker(period)
-		defer ticker.Stop()
-
-		seqID := uint64(0)
-
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-p.done:
-				return
-			case <-ticker.C:
-				seqID++
-				now := uint64(time.Now().UnixMilli())
-				pingMsg := pkgframing.MessagePayload{
-					Echo: &pkgconnreg.EchoPayload{
-						Direction:     pkgconnreg.EchoDirectionC2S,
-						CorrelationID: fmt.Sprintf("ping-%d", seqID),
-						Timestamp:     now,
-						SeqID:         seqID,
-					},
-				}
-
-				if err := p.Send(ctx, pingMsg); err != nil {
-					log.Println("Failed to send ping:", err)
-					return
-				}
-
-				if p.debug {
-					log.Printf("Sent ping - SeqID: %d, CorrelationID: ping-%d", seqID, seqID)
-				}
-			}
-		}
-	}()
 }

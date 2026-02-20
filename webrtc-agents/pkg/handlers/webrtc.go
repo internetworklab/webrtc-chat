@@ -8,24 +8,14 @@ import (
 	"sync"
 	"time"
 
+	pkgproxy "webrtc-agents/pkg/proxy"
+
 	pkgconnreg "example.com/webrtcserver/pkg/connreg"
 	pkgframing "example.com/webrtcserver/pkg/framing"
 	pkgsafemap "example.com/webrtcserver/pkg/safemap"
 
 	"github.com/pion/webrtc/v4"
 )
-
-// SignallingServerProxy defines the interface for signalling communication
-type SignallingServerProxy interface {
-	// Send sends a message to the signalling server
-	Send(ctx context.Context, msg pkgframing.MessagePayload) error
-	// Receive returns a channel for receiving messages from the signalling server
-	Receive() <-chan pkgframing.MessagePayload
-	// GetNodeID returns the current node ID
-	GetNodeID() string
-	// SetNodeID sets the node ID after registration
-	SetNodeID(nodeID string)
-}
 
 // PeerConnEntry tracks a peer connection and its associated data
 type PeerConnEntry struct {
@@ -88,11 +78,22 @@ const (
 
 // WebRTCHandler handles WebRTC peer connections
 type WebRTCHandler struct {
-	signalling    SignallingServerProxy
+	signalling    pkgproxy.SignallingServerProxy
 	peerConnStore *PeerConnStore
 	webrtcAPI     *webrtc.API
 	iceServers    []webrtc.ICEServer
 	debug         bool
+	nodeID        string
+}
+
+func (h *WebRTCHandler) GetNodeID() string {
+	// todo: protect it with lock/proper synchronization
+	return h.nodeID
+}
+
+func (h *WebRTCHandler) SetNodeID(nodeID string) {
+	// todo: protect it with lock/proper synchronization
+	h.nodeID = nodeID
 }
 
 // NewWebRTCHandler creates a new WebRTC handler
@@ -114,7 +115,7 @@ func NewWebRTCHandler(iceServers []string, debug bool) *WebRTCHandler {
 }
 
 // Run starts the WebRTC handler
-func (h *WebRTCHandler) Run(ctx context.Context, signalling SignallingServerProxy) {
+func (h *WebRTCHandler) Run(ctx context.Context, signalling pkgproxy.SignallingServerProxy) {
 	h.signalling = signalling
 
 	for {
@@ -135,7 +136,7 @@ func (h *WebRTCHandler) Run(ctx context.Context, signalling SignallingServerProx
 func (h *WebRTCHandler) handleMessage(ctx context.Context, msg pkgframing.MessagePayload) {
 	// Handle node ID from registration response
 	if msg.NodeId != "" {
-		h.signalling.SetNodeID(msg.NodeId)
+		h.SetNodeID(msg.NodeId)
 		log.Printf("Registered with node ID: %s", msg.NodeId)
 		return
 	}
@@ -155,10 +156,6 @@ func (h *WebRTCHandler) handleMessage(ctx context.Context, msg pkgframing.Messag
 
 // handleSDPOffer handles SDP offer/answer messages
 func (h *WebRTCHandler) handleSDPOffer(ctx context.Context, sdpOffer *pkgconnreg.SDPOfferPayload) {
-	myNodeID := h.signalling.GetNodeID()
-	if sdpOffer.ToNodeId != myNodeID {
-		return
-	}
 
 	remoteNodeID := sdpOffer.FromNodeId
 	log.Printf("[webrtc] Received SDP offer from peer %s, type: %s", remoteNodeID, sdpOffer.Type)
@@ -228,7 +225,7 @@ func (h *WebRTCHandler) handleSDPOffer(ctx context.Context, sdpOffer *pkgconnreg
 			SDPOffer: &pkgconnreg.SDPOfferPayload{
 				Type:       pkgconnreg.OfferTypeAnswer,
 				OfferJSON:  string(answerJSON),
-				FromNodeId: myNodeID,
+				FromNodeId: h.GetNodeID(),
 				ToNodeId:   remoteNodeID,
 			},
 		}
@@ -260,10 +257,6 @@ func (h *WebRTCHandler) handleSDPOffer(ctx context.Context, sdpOffer *pkgconnreg
 
 // handleICEOffer handles ICE candidate messages
 func (h *WebRTCHandler) handleICEOffer(iceOffer *pkgconnreg.ICEOfferPayload) {
-	myNodeID := h.signalling.GetNodeID()
-	if iceOffer.ToNodeId != myNodeID {
-		return
-	}
 
 	remoteNodeID := iceOffer.FromNodeId
 	if h.debug {
@@ -356,11 +349,6 @@ func (h *WebRTCHandler) createPeerConnection(remoteNodeID string) (*PeerConnEntr
 			return
 		}
 
-		myNodeID := h.signalling.GetNodeID()
-		if myNodeID == "" {
-			return
-		}
-
 		candidateJSON, err := json.Marshal(candidate.ToJSON())
 		if err != nil {
 			log.Printf("Failed to marshal ICE candidate: %v", err)
@@ -370,7 +358,7 @@ func (h *WebRTCHandler) createPeerConnection(remoteNodeID string) (*PeerConnEntr
 		iceOfferMsg := pkgframing.MessagePayload{
 			ICEOffer: &pkgconnreg.ICEOfferPayload{
 				OfferJSON:  string(candidateJSON),
-				FromNodeId: myNodeID,
+				FromNodeId: h.GetNodeID(),
 				ToNodeId:   remoteNodeID,
 			},
 		}
@@ -480,13 +468,11 @@ func (h *WebRTCHandler) initiateICERestart(entry *PeerConnEntry, remoteNodeID st
 		return fmt.Errorf("failed to marshal offer: %w", err)
 	}
 
-	myNodeID := h.signalling.GetNodeID()
-
 	offerMsg := pkgframing.MessagePayload{
 		SDPOffer: &pkgconnreg.SDPOfferPayload{
 			Type:       pkgconnreg.OfferTypeOffer,
 			OfferJSON:  string(offerJSON),
-			FromNodeId: myNodeID,
+			FromNodeId: h.GetNodeID(),
 			ToNodeId:   remoteNodeID,
 		},
 	}
