@@ -1551,6 +1551,8 @@ export default function Home() {
     }
   };
 
+  const [showDropArea, setShowDropArea] = useState(false);
+
   return (
     <Fragment>
       <Box sx={{ display: "flex", flexDirection: "row", height: "100vh" }}>
@@ -1761,6 +1763,84 @@ export default function Home() {
               flexDirection: "column",
               overflow: "hidden",
             }}
+            onDrop={(ev) => {
+              ev.preventDefault();
+              ev.stopPropagation();
+              console.log(
+                "[dbg] [drop] onDrop:",
+                ev,
+                "at",
+                new Date().valueOf(),
+              );
+              const filelist = ev.dataTransfer?.files;
+              const pc = connTrackRef.current[activeConn]?.peerConnection;
+              const chatDC = connTrackRef.current[activeConn]?.dataChannel;
+              const fromNodeId = nodeIdRef.current;
+              const toNodeId = activeConn;
+              if (filelist && filelist.length > 0 && pc && chatDC) {
+                for (const file of filelist) {
+                  let fileCat = ChatMessageFileCategory.Image;
+                  if (file.type.startsWith("video/")) {
+                    fileCat = ChatMessageFileCategory.Video;
+                  } else if (file.type.startsWith("image/")) {
+                    fileCat = ChatMessageFileCategory.Image;
+                  } else {
+                    fileCat = ChatMessageFileCategory.File;
+                  }
+                  if (
+                    fileCat === ChatMessageFileCategory.Image ||
+                    fileCat === ChatMessageFileCategory.Video
+                  ) {
+                    createThumbnailFromFile(file)
+                      .then((thumbnail) => {
+                        transmitFileViaPC(
+                          pc,
+                          chatDC,
+                          fromNodeId,
+                          toNodeId,
+                          fileCat,
+                          file,
+                          setConnTrackStatus,
+                          thumbnail,
+                        );
+                      })
+                      .catch((e) => {
+                        console.error(
+                          "failed to create thumbnail for file",
+                          file.name,
+                          e,
+                        );
+                      });
+                  } else {
+                    transmitFileViaPC(
+                      pc,
+                      chatDC,
+                      fromNodeId,
+                      toNodeId,
+                      fileCat,
+                      file,
+                      setConnTrackStatus,
+                      undefined,
+                    );
+                  }
+                }
+              }
+              setShowDropArea(false);
+            }}
+            onDragOver={(ev) => {
+              ev.preventDefault();
+              ev.stopPropagation();
+              console.log(
+                "[dbg] [drop] onDragOver:",
+                ev,
+                "at",
+                new Date().valueOf(),
+              );
+              setShowDropArea(true);
+            }}
+            onMouseOut={(ev) => {
+              setShowDropArea(false);
+            }}
           >
             <Paper
               sx={{
@@ -1781,78 +1861,68 @@ export default function Home() {
               />
               <Box>{activeConn ? userPreferenceMap[activeConn]?.name : ""}</Box>
             </Paper>
-            <Box
-              ref={msgsBoxRef}
-              onScroll={handleScroll}
-              sx={{
-                flex: 1,
-                minHeight: 0,
-                overflow: "auto",
-                display: "flex",
-                flexDirection: "column",
-                gap: 1,
-                padding: 2,
-                position: "relative",
-              }}
-            >
-              {messages.map((message) => (
-                <RenderMessage
-                  message={message}
-                  key={message.messageId}
-                  onAmend={(amendedMsg) => {
-                    sendAmendMsg(amendedMsg);
-                  }}
-                  onDelete={(deletedMsgId) => {
-                    sendMsgDeleteRequest(activeConn, deletedMsgId);
-                  }}
-                  fileTransferStatus={
-                    connTrackStatus?.[activeConn]?.fileTransferStatus ?? {}
-                  }
-                  userPreferenceMap={userPreferenceMap}
-                />
-              ))}
-            </Box>
-            <Box sx={{ flexShrink: 0 }}>
-              <MessageComposer
-                supportAttachment={
-                  conns.find((conn) => conn.node_id === activeConn)?.entry
-                    ?.attributes?.[WellKnownAttributes.SupportAttachment] ===
-                  "true"
-                }
-                onFile={(filelist) => {
-                  const fileCat = ChatMessageFileCategory.File;
-                  const pc = connTrackRef.current[activeConn]?.peerConnection;
-                  const chatDC = connTrackRef.current[activeConn]?.dataChannel;
-                  const fromNodeId = nodeIdRef.current;
-                  const toNodeId = activeConn;
-                  if (filelist && filelist.length > 0 && pc && chatDC) {
-                    for (const file of filelist) {
-                      transmitFileViaPC(
-                        pc,
-                        chatDC,
-                        fromNodeId,
-                        toNodeId,
-                        fileCat,
-                        file,
-                        setConnTrackStatus,
-                        undefined,
-                      );
-                    }
-                  }
+            {showDropArea ? (
+              <Box
+                sx={{
+                  flex: 1,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
                 }}
-                onPhoto={(filelist) => {
-                  const pc = connTrackRef.current[activeConn]?.peerConnection;
-                  const chatDC = connTrackRef.current[activeConn]?.dataChannel;
-                  const fromNodeId = nodeIdRef.current;
-                  const toNodeId = activeConn;
-                  if (filelist && filelist.length > 0 && pc && chatDC) {
-                    for (const file of filelist) {
-                      let fileCat = ChatMessageFileCategory.Image;
-                      if (file.type.startsWith("video/")) {
-                        fileCat = ChatMessageFileCategory.Video;
+              >
+                Release to drop
+              </Box>
+            ) : (
+              <Fragment>
+                <Box
+                  ref={msgsBoxRef}
+                  onScroll={handleScroll}
+                  sx={{
+                    flex: 1,
+                    minHeight: 0,
+                    overflow: "auto",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 1,
+                    padding: 2,
+                    position: "relative",
+                  }}
+                >
+                  {messages.map((message) => (
+                    <RenderMessage
+                      message={message}
+                      key={message.messageId}
+                      onAmend={(amendedMsg) => {
+                        sendAmendMsg(amendedMsg);
+                      }}
+                      onDelete={(deletedMsgId) => {
+                        sendMsgDeleteRequest(activeConn, deletedMsgId);
+                      }}
+                      fileTransferStatus={
+                        connTrackStatus?.[activeConn]?.fileTransferStatus ?? {}
                       }
-                      createThumbnailFromFile(file)
-                        .then((thumbnail) => {
+                      userPreferenceMap={userPreferenceMap}
+                    />
+                  ))}
+                </Box>
+                <Box sx={{ flexShrink: 0 }}>
+                  <MessageComposer
+                    supportAttachment={
+                      conns.find((conn) => conn.node_id === activeConn)?.entry
+                        ?.attributes?.[
+                        WellKnownAttributes.SupportAttachment
+                      ] === "true"
+                    }
+                    onFile={(filelist) => {
+                      const fileCat = ChatMessageFileCategory.File;
+                      const pc =
+                        connTrackRef.current[activeConn]?.peerConnection;
+                      const chatDC =
+                        connTrackRef.current[activeConn]?.dataChannel;
+                      const fromNodeId = nodeIdRef.current;
+                      const toNodeId = activeConn;
+                      if (filelist && filelist.length > 0 && pc && chatDC) {
+                        for (const file of filelist) {
                           transmitFileViaPC(
                             pc,
                             chatDC,
@@ -1861,44 +1931,74 @@ export default function Home() {
                             fileCat,
                             file,
                             setConnTrackStatus,
-                            thumbnail,
+                            undefined,
                           );
-                        })
-                        .catch((e) => {
-                          console.error(
-                            "failed to create thumbnail for file",
-                            file.name,
-                            e,
-                          );
-                        });
-                    }
-                  }
-                }}
-                onText={(text) => {
-                  const dc = connTrackRef.current[activeConn]?.dataChannel;
-                  if (dc) {
-                    const msgObject: ChatMessage = {
-                      messageId: crypto.randomUUID(),
-                      message: text,
-                      timestamp: Date.now(),
-                      fromNodeId: nodeIdRef.current,
-                      toNodeId: activeConn,
-                    };
-                    sendMsg(dc, msgObject, activeConn, setConnTrackStatus)
-                      .then((msgObject) => {
-                        console.log(
-                          "[dbg] [ack] message",
-                          msgObject.messageId,
-                          "was acked",
-                        );
-                      })
-                      .catch((e) => {
-                        console.error("failed to send(or ack) message", e);
-                      });
-                  }
-                }}
-              />
-            </Box>
+                        }
+                      }
+                    }}
+                    onPhoto={(filelist) => {
+                      const pc =
+                        connTrackRef.current[activeConn]?.peerConnection;
+                      const chatDC =
+                        connTrackRef.current[activeConn]?.dataChannel;
+                      const fromNodeId = nodeIdRef.current;
+                      const toNodeId = activeConn;
+                      if (filelist && filelist.length > 0 && pc && chatDC) {
+                        for (const file of filelist) {
+                          let fileCat = ChatMessageFileCategory.Image;
+                          if (file.type.startsWith("video/")) {
+                            fileCat = ChatMessageFileCategory.Video;
+                          }
+                          createThumbnailFromFile(file)
+                            .then((thumbnail) => {
+                              transmitFileViaPC(
+                                pc,
+                                chatDC,
+                                fromNodeId,
+                                toNodeId,
+                                fileCat,
+                                file,
+                                setConnTrackStatus,
+                                thumbnail,
+                              );
+                            })
+                            .catch((e) => {
+                              console.error(
+                                "failed to create thumbnail for file",
+                                file.name,
+                                e,
+                              );
+                            });
+                        }
+                      }
+                    }}
+                    onText={(text) => {
+                      const dc = connTrackRef.current[activeConn]?.dataChannel;
+                      if (dc) {
+                        const msgObject: ChatMessage = {
+                          messageId: crypto.randomUUID(),
+                          message: text,
+                          timestamp: Date.now(),
+                          fromNodeId: nodeIdRef.current,
+                          toNodeId: activeConn,
+                        };
+                        sendMsg(dc, msgObject, activeConn, setConnTrackStatus)
+                          .then((msgObject) => {
+                            console.log(
+                              "[dbg] [ack] message",
+                              msgObject.messageId,
+                              "was acked",
+                            );
+                          })
+                          .catch((e) => {
+                            console.error("failed to send(or ack) message", e);
+                          });
+                      }
+                    }}
+                  />
+                </Box>
+              </Fragment>
+            )}
           </Box>
         ) : (
           <Box
