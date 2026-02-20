@@ -31,26 +31,31 @@ export const PRESET_COLORS: ColorToken[] = [
   { light: "#FFCC80", dark: "#FF9800" }, // Orange
 ];
 
+function roundN(i: number, N: number): number {
+  return (i + N) % N;
+}
+
 export function getRealColorTokenIdx(
   idx: number | string | undefined | null,
   tokens: ColorToken[],
 ): number {
+  const N = Math.max(1, tokens.length);
   if (idx === undefined || idx === null || idx === "") {
-    return -1;
+    return roundN(-1, N);
   }
   if (typeof idx === "string") {
     try {
       let parsedIdx = parseInt(idx, 10);
       if (isNaN(parsedIdx)) {
-        parsedIdx = -1;
+        parsedIdx = roundN(-1, N);
       }
       return parsedIdx;
     } catch (e) {
       console.error("failed to parse color idx:", e);
     }
-    return -1;
+    return roundN(-1, N);
   }
-  return (idx + tokens.length) % tokens.length;
+  return roundN(idx, N);
 }
 
 export function getPreferredColor(
