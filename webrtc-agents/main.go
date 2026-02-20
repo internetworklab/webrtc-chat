@@ -55,7 +55,9 @@ func main() {
 				log.Println("Read error:", err)
 				return
 			}
-			log.Printf("Received: %s", message)
+			if cli.Debug {
+				log.Printf("Received: %s", message)
+			}
 
 			// Parse the message to check if it's a pong
 			var payload pkgframing.MessagePayload
@@ -65,9 +67,11 @@ func main() {
 			}
 
 			if payload.Echo != nil && payload.Echo.Direction == pkgconnreg.EchoDirectionS2C {
-				rtt := time.Since(time.UnixMilli(int64(payload.Echo.Timestamp)))
-				log.Printf("Pong received - RTT: %v, CorrelationID: %s, SeqID: %d",
-					rtt, payload.Echo.CorrelationID, payload.Echo.SeqID)
+				if cli.Debug {
+					rtt := time.Since(time.UnixMilli(int64(payload.Echo.Timestamp)))
+					log.Printf("Pong received - RTT: %v, CorrelationID: %s, SeqID: %d",
+						rtt, payload.Echo.CorrelationID, payload.Echo.SeqID)
+				}
 			}
 		}
 	}()
@@ -120,7 +124,9 @@ func main() {
 				log.Println("Failed to send ping:", err)
 				return
 			}
-			log.Printf("Sent ping - SeqID: %d, CorrelationID: ping-%d", seqID, seqID)
+			if cli.Debug {
+				log.Printf("Sent ping - SeqID: %d, CorrelationID: ping-%d", seqID, seqID)
+			}
 
 		case <-interrupt:
 			log.Println("Interrupt received, closing connection...")
