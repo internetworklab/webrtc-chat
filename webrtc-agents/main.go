@@ -66,7 +66,12 @@ func main() {
 	log.Println("Ping/pong loop started")
 
 	// Create WebSocket signalling proxy from existing connection
-	signallingProxy := pkgsignalling.NewWebSocketProxy(wsConn, cli.Debug)
+	signallingProxy := pkgsignalling.NewWebSocketProxy(wsConn, &pkgsignalling.WebSocketProxyOptions{
+		Debug:                 cli.Debug,
+		ReconnectOnDisconnect: true,
+		ReconnectDelay:        time.Second * 3,
+	})
+	defer signallingProxy.Close()
 
 	// Create filtered signalling proxy that handles pong messages
 	filteredProxy := pkgsignalling.NewFilteredSignallingProxy(signallingProxy, cli.Debug)

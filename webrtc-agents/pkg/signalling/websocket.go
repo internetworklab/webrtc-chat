@@ -2,7 +2,6 @@ package signalling
 
 import (
 	"context"
-	"encoding/json"
 	"log"
 	"sync"
 
@@ -19,19 +18,31 @@ import (
 
 // WebSocketProxy implements SignallingServerProxy using WebSocket
 type WebSocketProxy struct {
-	conn        *websocket.Conn
-	nodeID      string
-	nodeIDMu    sync.RWMutex
-	receiveChan chan pkgframing.MessagePayload
-	debug       bool
+	conn                  *websocket.Conn
+	nodeID                string
+	nodeIDMu              sync.RWMutex
+	receiveChan           chan pkgframing.MessagePayload
+	debug                 bool
+	reConnectOnDisconnect bool
+	reConnectDelay        time.Duration
+}
+
+type WebSocketProxyOptions struct {
+	ReconnectOnDisconnect bool
+	ReconnectDelay        time.Duration
+	Debug                 bool
 }
 
 // NewWebSocketProxy creates a new WebSocket signalling proxy from an existing connection
-func NewWebSocketProxy(conn *websocket.Conn, debug bool) *WebSocketProxy {
+func NewWebSocketProxy(conn *websocket.Conn, options *WebSocketProxyOptions) *WebSocketProxy {
 	proxy := &WebSocketProxy{
 		conn:        conn,
-		receiveChan: make(chan pkgframing.MessagePayload, 100),
-		debug:       debug,
+		receiveChan: make(chan pkgframing.MessagePayload, 1),
+	}
+	if options != nil {
+		proxy.debug = options.Debug
+		proxy.reConnectOnDisconnect = options.ReconnectOnDisconnect
+		proxy.reConnectDelay = options.ReconnectDelay
 	}
 
 	return proxy
@@ -50,30 +61,27 @@ func (p *WebSocketProxy) Receive() <-chan pkgframing.MessagePayload {
 // readLoop reads messages from WebSocket and sends to receiveChan
 func (p *WebSocketProxy) Run(ctx context.Context) {
 	go func(ctx context.Context) {
+		defer close(p.receiveChan)
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			default:
-				_, message, err := p.conn.ReadMessage()
+				var payload pkgframing.MessagePayload
+				err := p.conn.ReadJSON(&payload)
 				if err != nil {
 					log.Println("Read error:", err)
 					return
-				}
-
-				if p.debug {
-					log.Printf("Received: %s", message)
-				}
-
-				var payload pkgframing.MessagePayload
-				if err := json.Unmarshal(message, &payload); err != nil {
-					log.Printf("Failed to parse message: %v", err)
-					continue
 				}
 				p.receiveChan <- payload
 			}
 		}
 	}(ctx)
+}
+
+func (p *WebSocketProxy) Close() {
+	p.reConnectOnDisconnect = false
+	p.conn.Close()
 }
 
 // FilteredSignallingProxy wraps a SignallingServerProxy and filters out pong messages
