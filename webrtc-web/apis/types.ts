@@ -41,7 +41,7 @@ export interface MessagePayload {
   // emits when register success
   register?: RegisterPayload;
   echo?: EchoPayload;
-  online?: any;
+  online?: unknown;
   rename?: RenamePayload;
 
   // SDP and ICE offers are concepts from WebRTC
