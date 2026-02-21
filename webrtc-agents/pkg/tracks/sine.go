@@ -47,13 +47,12 @@ func NewMyWHTrack(streamId string) (*MyWHTrack, error) {
 
 	wh.samplesPerPacket = int(float64(wh.frameIntv.Milliseconds()) / float64(1000) * float64(wh.sampleRate))
 
-	maxPayloadSize := wh.mtu -
+	wh.maxPayloadSize = wh.mtu -
 		40 - // IPv6 header
 		8 - // UDP header
 		16 - // SRTP Auth Tag, would be 10 bytes (for HMAC-SHA1), or 16 bytes (for AES-GCM)
 		12 - // minimum RTP header of fixed size
 		20 // possible RTP extensions
-	wh.maxPayloadSize = maxPayloadSize
 
 	enc, err := opus.NewEncoder(wh.sampleRate, wh.numChannels, opus.AppVoIP)
 	if err != nil {
@@ -73,7 +72,7 @@ func getOpusCodecParams(ctx webrtc.TrackLocalContext) *webrtc.RTPCodecParameters
 	return nil
 }
 
-// returns: (sizeofPayload, encodedPayload, error)
+// returns: (sizeofPayload, error)
 func (track *MyWHTrack) getPacket(pcmBuf []int16, encodeBuf []byte) (int, error) {
 
 	for i := range pcmBuf {
@@ -131,8 +130,7 @@ func (track *MyWHTrack) startStreaming(ctx webrtc.TrackLocalContext, selectedCod
 
 	encodeBuf := make([]byte, track.maxPayloadSize)
 
-	// --- PHASE 1: PRE-FLOOD  ---
-	// We send 10 packets immediately to fill the receiver's buffer
+	// pre-populating packets to the receiver's buffer
 	for i := 0; i < track.numPrePopulatePackets; i++ {
 		n, err := track.getPacket(pcmBuf, encodeBuf)
 		if err != nil {
@@ -188,6 +186,7 @@ func (track *MyWHTrack) startStreaming(ctx webrtc.TrackLocalContext, selectedCod
 // This will be called internally after signaling is complete and the list of available
 // codecs has been determined
 func (track *MyWHTrack) Bind(ctx webrtc.TrackLocalContext) (webrtc.RTPCodecParameters, error) {
+	log.Printf("[track] stream %s is started", track.streamId)
 	codecParam := getOpusCodecParams(ctx)
 	if codecParam == nil {
 		return webrtc.RTPCodecParameters{}, errors.New("no supported codec found, currently only opus is supported")
