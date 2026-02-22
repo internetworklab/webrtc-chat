@@ -41,21 +41,21 @@ func NewOpusSineWaveformGenerator(
 	return whGen, nil
 }
 
-func (track *OpusSineWaveformGenerator) GetPacket(ssrc uint32, payloadType uint8, sequenceNumber uint16, timestamp uint32) (*rtp.Packet, error) {
-	pcmBuf := track.pcmBuf
-	for i := 0; i < len(pcmBuf)/track.numChannels; i++ {
-		t := float64(timestamp+uint32(i)) / float64(track.sampleRate)
-		x := 2 * math.Pi * track.frequency * t
+func (generator *OpusSineWaveformGenerator) GetPacket(ssrc uint32, payloadType uint8, sequenceNumber uint16, timestamp uint32) (*rtp.Packet, error) {
+	pcmBuf := generator.pcmBuf
+	for i := 0; i < len(pcmBuf)/generator.numChannels; i++ {
+		t := float64(timestamp+uint32(i)) / float64(generator.sampleRate)
+		x := 2 * math.Pi * generator.frequency * t
 		y := math.Sin(x)
 		scaledY := math.Round(y * float64(math.MaxInt16))
 		roundedY := int16(scaledY)
-		for j := range track.numChannels {
-			pcmBuf[i*track.numChannels+j] = roundedY
+		for j := range generator.numChannels {
+			pcmBuf[i*generator.numChannels+j] = roundedY
 		}
 	}
 
-	encodeBuf := track.encodeBuf
-	n, err := track.opusEncoder.Encode(pcmBuf, encodeBuf)
+	encodeBuf := generator.encodeBuf
+	n, err := generator.opusEncoder.Encode(pcmBuf, encodeBuf)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode payload: %w\nssrc=%d,payloadType=%d,len(pcmBuf)=%d,len(encodeBuf)=%d", err, ssrc, payloadType, len(pcmBuf), len(encodeBuf))
 	}

@@ -26,14 +26,14 @@ func NewOpusWhiteNoiseGenerator(opusEncoder *opus.Encoder, numChannels int, samp
 	return whGen, nil
 }
 
-func (track *OpusWhiteNoiseGenerator) GetPacket(ssrc uint32, payloadType uint8, sequenceNumber uint16, timestamp uint32) (*rtp.Packet, error) {
-	pcmBuf := track.pcmBuf
+func (generator *OpusWhiteNoiseGenerator) GetPacket(ssrc uint32, payloadType uint8, sequenceNumber uint16, timestamp uint32) (*rtp.Packet, error) {
+	pcmBuf := generator.pcmBuf
 	for i := range pcmBuf {
 		pcmBuf[i] = int16(rand.Uint32())
 	}
 
-	encodeBuf := track.encodeBuf
-	n, err := track.opusEncoder.Encode(pcmBuf, encodeBuf)
+	encodeBuf := generator.encodeBuf
+	n, err := generator.opusEncoder.Encode(pcmBuf, encodeBuf)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode payload: %w\nssrc=%d,payloadType=%d,len(pcmBuf)=%d,len(encodeBuf)=%d", err, ssrc, payloadType, len(pcmBuf), len(encodeBuf))
 	}
