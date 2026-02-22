@@ -7,9 +7,10 @@ import (
 	"math/rand"
 	"time"
 
+	pkgwn "webrtc-agents/pkg/tracks/wn"
+
 	"github.com/google/uuid"
 	"github.com/hraban/opus"
-	"github.com/pion/rtp"
 	webrtc "github.com/pion/webrtc/v4"
 )
 
@@ -26,6 +27,7 @@ type MyWHTrack struct {
 	frameIntv             time.Duration
 	samplesPerPacket      int
 	numPrePopulatePackets int
+	whGen                 *pkgwn.OpusWhiteNoiseGenerator
 }
 
 func NewMyWHTrack(streamId string) (*MyWHTrack, error) {
@@ -60,6 +62,16 @@ func NewMyWHTrack(streamId string) (*MyWHTrack, error) {
 	}
 	wh.opusEncoder = enc
 
+	wh.whGen, err = pkgwn.NewOpusWhiteNoiseGenerator(
+		enc,
+		wh.numChannels,
+		wh.samplesPerPacket,
+		wh.maxPayloadSize,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize packet generator")
+	}
+
 	return wh, nil
 }
 
@@ -72,39 +84,19 @@ func getOpusCodecParams(ctx webrtc.TrackLocalContext) *webrtc.RTPCodecParameters
 	return nil
 }
 
-// returns: (sizeofPayload, error)
-func (track *MyWHTrack) getPacket(pcmBuf []int16, encodeBuf []byte) (int, error) {
-
-	for i := range pcmBuf {
-		pcmBuf[i] = int16(rand.Uint32())
-	}
-
-	n, err := track.opusEncoder.Encode(pcmBuf, encodeBuf)
+func (track *MyWHTrack) encodeAndSend(ctx webrtc.TrackLocalContext, selectedCodec webrtc.RTPCodecParameters, sequenceNumber uint16, timestamp uint32) (uint16, uint32, error) {
+	pkt, err := track.whGen.GetPacket(uint32(ctx.SSRC()), uint8(selectedCodec.PayloadType), sequenceNumber, timestamp)
 	if err != nil {
-		return 0, err
+		return sequenceNumber, timestamp, err
 	}
 
-	return n, err
-}
-
-// returns: (nextSequence, nextTimestamp, error)
-func (track *MyWHTrack) sendPacket(ctx webrtc.TrackLocalContext, payload []byte, payloadType uint8, sequenceNumber uint16, timestamp uint32) (uint16, uint32, error) {
-	rtpHeader := rtp.Header{
-		Version:        2,
-		PayloadType:    payloadType,
-		SequenceNumber: sequenceNumber,
-		Timestamp:      timestamp,
-		SSRC:           uint32(ctx.SSRC()),
+	if _, err := ctx.WriteStream().WriteRTP(&pkt.Header, pkt.Payload); err != nil {
+		return sequenceNumber, timestamp, err
 	}
 
-	_, err := ctx.WriteStream().WriteRTP(&rtpHeader, payload)
-	if err == nil {
-		sequenceNumber++
-		timestamp += uint32(track.samplesPerPacket)
-		return sequenceNumber, timestamp, nil
-	}
-
-	return sequenceNumber, timestamp, err
+	sequenceNumber++
+	timestamp += uint32(track.samplesPerPacket)
+	return sequenceNumber, timestamp, nil
 }
 
 func (track *MyWHTrack) startStreaming(ctx webrtc.TrackLocalContext, selectedCodec webrtc.RTPCodecParameters) {
@@ -126,27 +118,12 @@ func (track *MyWHTrack) startStreaming(ctx webrtc.TrackLocalContext, selectedCod
 	// // by RFC 3550, they should be started at random
 	var timestamp uint32 = rand.Uint32()
 
-	pcmBuf := make([]int16, track.numChannels*track.samplesPerPacket)
-
-	encodeBuf := make([]byte, track.maxPayloadSize)
-
 	// pre-populating packets to the receiver's buffer
+	var err error
 	for i := 0; i < track.numPrePopulatePackets; i++ {
-		n, err := track.getPacket(pcmBuf, encodeBuf)
+		sequenceNumber, timestamp, err = track.encodeAndSend(ctx, selectedCodec, sequenceNumber, timestamp)
 		if err != nil {
-			log.Println("Failed to get RTP packet payload")
-			return
-		}
-
-		sequenceNumber, timestamp, err = track.sendPacket(
-			ctx,
-			encodeBuf[:n],
-			uint8(selectedCodec.PayloadType),
-			sequenceNumber,
-			timestamp,
-		)
-		if err != nil {
-			log.Println("Failed to send RTP packet")
+			log.Println("Failed to encode and send RTP packet")
 			return
 		}
 	}
@@ -157,21 +134,9 @@ func (track *MyWHTrack) startStreaming(ctx webrtc.TrackLocalContext, selectedCod
 		select {
 		case <-ticker.C:
 
-			n, err := track.getPacket(pcmBuf, encodeBuf)
+			sequenceNumber, timestamp, err = track.encodeAndSend(ctx, selectedCodec, sequenceNumber, timestamp)
 			if err != nil {
-				log.Println("Failed to get RTP packet payload")
-				return
-			}
-
-			sequenceNumber, timestamp, err = track.sendPacket(
-				ctx,
-				encodeBuf[:n],
-				uint8(selectedCodec.PayloadType),
-				sequenceNumber,
-				timestamp,
-			)
-			if err != nil {
-				log.Println("Failed to send RTP packet")
+				log.Println("Failed to encode and send RTP packet")
 				return
 			}
 

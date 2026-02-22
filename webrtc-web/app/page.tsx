@@ -886,6 +886,13 @@ function attachPeerConnectionEventListeners(
       console.log(`[dbg]${logSource} End of ICE candidate gathering.`);
     }
   };
+
+  peerConnection.ontrack = (event) => {
+    console.log(
+      `[dbg]${logSource} Received track open request from peer ${remoteNodeId}:`,
+      event.track,
+    );
+  };
 }
 
 function tryParseInt(s: string): number {

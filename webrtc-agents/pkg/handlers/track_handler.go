@@ -7,6 +7,7 @@ import (
 	"log"
 	"time"
 
+	pkgtracks "webrtc-agents/pkg/tracks"
 	pkgwsrunner "webrtc-agents/pkg/ws_runner"
 
 	pkgconnreg "example.com/webrtcserver/pkg/connreg"
@@ -269,7 +270,7 @@ func (h *TrackHandler) createPeerConnection(remoteNodeID string, signallingTx ch
 			entry.mu.Lock()
 			entry.DataChannel = dc
 			entry.mu.Unlock()
-			h.setupChatDataChannel(dc, remoteNodeID)
+			h.setupChatDataChannel(dc, remoteNodeID, signallingTx)
 		case PredefinedDCLabelPing:
 			h.setupPingDataChannel(dc, remoteNodeID)
 		default:
@@ -425,7 +426,7 @@ func (h *TrackHandler) cleanup() {
 }
 
 // setupChatDataChannel sets up event handlers for chat data channel
-func (h *TrackHandler) setupChatDataChannel(dc *webrtc.DataChannel, remoteNodeID string) {
+func (h *TrackHandler) setupChatDataChannel(dc *webrtc.DataChannel, remoteNodeID string, signallingTx chan<- pkgframing.MessagePayload) {
 	dc.OnOpen(func() {
 		log.Printf("[webrtc] Chat data channel opened with peer %s", remoteNodeID)
 	})
@@ -439,6 +440,20 @@ func (h *TrackHandler) setupChatDataChannel(dc *webrtc.DataChannel, remoteNodeID
 		var chatMsg ChatMessage
 		if err := json.Unmarshal(msg.Data, &chatMsg); err != nil {
 			log.Printf("[webrtc] Failed to parse chat message: %v", err)
+			return
+		}
+
+		// Check for "/start" command to create a track
+		if chatMsg.Message != nil && *chatMsg.Message == "/start" {
+			log.Printf("[webrtc] Received /start command from peer %s", remoteNodeID)
+			entry, found := h.peerConnStore.Get(remoteNodeID)
+			if !found {
+				log.Printf("[webrtc] No peer connection found for peer %s", remoteNodeID)
+				return
+			}
+			if err := h.createAndAddTrack(entry, remoteNodeID, signallingTx); err != nil {
+				log.Printf("[webrtc] Failed to create track for peer %s: %v", remoteNodeID, err)
+			}
 			return
 		}
 
@@ -523,4 +538,57 @@ func (h *TrackHandler) setupPingDataChannel(dc *webrtc.DataChannel, remoteNodeID
 	dc.OnError(func(err error) {
 		log.Printf("[webrtc] Ping data channel error with peer %s: %v", remoteNodeID, err)
 	})
+}
+
+// createAndAddTrack creates a new audio track and adds it to the peer connection
+func (h *TrackHandler) createAndAddTrack(entry *PeerConnEntry, remoteNodeID string, signallingTx chan<- pkgframing.MessagePayload) error {
+	// Create a new audio track
+	track, err := pkgtracks.NewMyWHTrack(fmt.Sprintf("stream-%s", remoteNodeID))
+	if err != nil {
+		return fmt.Errorf("failed to create track: %w", err)
+	}
+
+	// Add the track to the peer connection
+	sender, err := entry.PeerConnection.AddTrack(track)
+	if err != nil {
+		return fmt.Errorf("failed to add track to peer connection: %w", err)
+	}
+
+	log.Printf("[webrtc] Created and added track %s for peer %s", track.ID(), remoteNodeID)
+
+	// Create a new offer since we added a track
+	offer, err := entry.PeerConnection.CreateOffer(nil)
+	if err != nil {
+		return fmt.Errorf("failed to create offer: %w", err)
+	}
+
+	// Set local description
+	if err := entry.PeerConnection.SetLocalDescription(offer); err != nil {
+		return fmt.Errorf("failed to set local description: %w", err)
+	}
+
+	// Marshal the offer to JSON
+	offerJSON, err := json.Marshal(offer)
+	if err != nil {
+		return fmt.Errorf("failed to marshal offer: %w", err)
+	}
+
+	// Send the offer via signalling server
+	offerMsg := pkgframing.MessagePayload{
+		SDPOffer: &pkgconnreg.SDPOfferPayload{
+			Type:       pkgconnreg.OfferTypeOffer,
+			OfferJSON:  string(offerJSON),
+			FromNodeId: h.GetNodeID(),
+			ToNodeId:   remoteNodeID,
+		},
+	}
+
+	signallingTx <- offerMsg
+
+	log.Printf("[webrtc] Sent offer with new track to peer %s", remoteNodeID)
+
+	// Remove the sender if we need to stop the track later
+	_ = sender
+
+	return nil
 }
