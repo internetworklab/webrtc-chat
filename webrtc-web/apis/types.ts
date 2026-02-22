@@ -256,6 +256,11 @@ export type PingStateRef = {
   txMap: Record<number, number>;
 };
 
+export interface AudioConnTrackEntry {
+  sourceNode?: MediaStreamAudioSourceNode;
+  gainNode?: GainNode;
+}
+
 // these are mutable states that don't have to be rendered to the screen immediately
 export type ConnTrackEntry = {
   peerConnection: RTCPeerConnection;
@@ -269,6 +274,8 @@ export type ConnTrackEntry = {
   fileDataChannels?: Record<string, RTCDataChannel>;
 
   pingSeqRef?: PingStateRef;
+
+  audioRef?: AudioConnTrackEntry;
 };
 
 export type WSServer = {

@@ -83,7 +83,10 @@ function makeConnTrackEntry(iceServers: string[]): ConnTrackEntry {
 // key is the node_id of remote peer
 type ConnTrack = Record<string, ConnTrackEntry>;
 
-function useWs(setConnTrackStatus: Dispatch<SetStateAction<ConnTrackStatus>>) {
+function useWs(
+  setConnTrackStatus: Dispatch<SetStateAction<ConnTrackStatus>>,
+  audioCtxRef: RefObject<AudioContext>,
+) {
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
@@ -239,6 +242,8 @@ function useWs(setConnTrackStatus: Dispatch<SetStateAction<ConnTrackStatus>>) {
               nodeIdRef,
               wsRef,
               logSource,
+              audioCtxRef,
+              connTrackRef,
             );
           }
           const ent = connTrackRef.current[remoteNodeId];
@@ -760,7 +765,9 @@ function attachPeerConnectionEventListeners(
   remoteNodeId: string,
   nodeIdRef: RefObject<string>,
   wsRef: RefObject<WebSocket | null>,
-  logId?: string,
+  logId: string | undefined,
+  audioCtxRef: RefObject<AudioContext>,
+  connTrackRef: RefObject<ConnTrack>,
 ) {
   const logSource = logId ? ` [${logId}]` : "";
   // registering event handlers for peerconnection handle
@@ -892,6 +899,52 @@ function attachPeerConnectionEventListeners(
       `[dbg]${logSource} Received track open request from peer ${remoteNodeId}:`,
       event.track,
     );
+
+    if (event.track.kind !== "audio") {
+      // because the 'ontrack' event fires once for every track (e.g. once for audio, then once for video)
+      console.log(
+        `[dbg]${logSource} Skipping non-audio track from peer ${remoteNodeId}:`,
+        event.track,
+      );
+      return;
+    }
+
+    const globalAudioCtx = audioCtxRef.current;
+    if (!globalAudioCtx) {
+      throw new Error(
+        "AudioContext is not initialized, make sure it is initialized at start globally",
+      );
+    }
+
+    const audioStream = new MediaStream([event.track]);
+    const sourceNode = globalAudioCtx.createMediaStreamSource(audioStream);
+    const gainNode =
+      connTrackRef.current?.[remoteNodeId]?.audioRef?.gainNode ||
+      globalAudioCtx.createGain();
+    sourceNode.connect(gainNode);
+    gainNode.connect(globalAudioCtx.destination);
+
+    event.track.onended = () => {
+      console.log(`[dbg]${logSource} Track from ${remoteNodeId} is ended`);
+      gainNode.disconnect();
+      sourceNode.disconnect();
+    };
+    console.log(
+      `[dbg]${logSource} Track from ${remoteNodeId} is started`,
+      "stream:",
+      audioStream,
+      "source:",
+      sourceNode,
+      "gain:",
+      gainNode,
+    );
+    if (connTrackRef.current?.[remoteNodeId]) {
+      if (!connTrackRef.current[remoteNodeId].audioRef) {
+        connTrackRef.current[remoteNodeId].audioRef = {};
+      }
+      connTrackRef.current[remoteNodeId].audioRef!.sourceNode = sourceNode;
+      connTrackRef.current[remoteNodeId].audioRef!.gainNode = gainNode;
+    }
   };
 }
 
@@ -1273,6 +1326,7 @@ function determineFollowingMode(msgsBox: HTMLDivElement) {
 
 export default function Home() {
   const [connTrackStatus, setConnTrackStatus] = useState<ConnTrackStatus>({});
+  const audioCtxRef = useRef<AudioContext>(new AudioContext());
 
   const {
     rtt,
@@ -1286,7 +1340,7 @@ export default function Home() {
     wsRef,
     doConnect,
     connTrackRef,
-  } = useWs(setConnTrackStatus);
+  } = useWs(setConnTrackStatus, audioCtxRef);
 
   const name = conns
     ? conns.find((conn) => conn.node_id === nodeId)?.entry?.node_name
@@ -1297,7 +1351,6 @@ export default function Home() {
     indexOfPreferColor: -1,
   });
   const [activeConn, setActiveConn] = useState("");
-  const activeConnEntry = conns?.find((conn) => conn.node_id == activeConn);
   const [showPreferenceDialog, setShowPreferenceDialog] = useState(false);
 
   const switchActiveConn = (
@@ -1320,6 +1373,8 @@ export default function Home() {
         nodeIdRef,
         wsRef,
         logSource,
+        audioCtxRef,
+        connTrackRef,
       );
 
       ent.dataChannel = ent.peerConnection.createDataChannel(
