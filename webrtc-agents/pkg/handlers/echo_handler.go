@@ -511,12 +511,45 @@ func (h *EchoHandler) setupPingDataChannel(dc *webrtc.DataChannel, remoteNodeID 
 	})
 
 	dc.OnMessage(func(msg webrtc.DataChannelMessage) {
-		if h.debug {
-			log.Printf("[webrtc] Received ping message from peer %s", remoteNodeID)
+		// Parse the incoming message
+		var chatMsg ChatMessage
+		if err := json.Unmarshal(msg.Data, &chatMsg); err != nil {
+			log.Printf("[webrtc] Failed to parse ping message: %v", err)
+			return
 		}
-		// Echo back the ping
-		if err := dc.Send(msg.Data); err != nil {
-			log.Printf("[webrtc] Failed to send ping response: %v", err)
+
+		// Check if it's a ping message
+		if chatMsg.Ping != nil && chatMsg.Ping.Direction == ChatMessagePingDirectionPing {
+			if h.debug {
+				log.Printf("[webrtc] Received ping (seq=%d) from peer %s", chatMsg.Ping.Seq, remoteNodeID)
+			}
+
+			// Create pong response with the SAME sequence number
+			pongMsg := ChatMessage{
+				MessageID:  uuid.New().String(),
+				FromNodeID: chatMsg.ToNodeID,
+				ToNodeID:   chatMsg.FromNodeID,
+				Timestamp:  time.Now().UnixMilli(),
+				Ping: &ChatMessagePing{
+					Direction: ChatMessagePingDirectionPong,
+					Seq:       chatMsg.Ping.Seq, // Critical: echo back the same seq
+				},
+			}
+
+			// Marshal and send the pong
+			pongData, err := json.Marshal(pongMsg)
+			if err != nil {
+				log.Printf("[webrtc] Failed to marshal pong message: %v", err)
+				return
+			}
+
+			if err := dc.SendText(string(pongData)); err != nil {
+				log.Printf("[webrtc] Failed to send pong: %v", err)
+			}
+
+			if h.debug {
+				log.Printf("[webrtc] Sent pong (seq=%d) to peer %s", chatMsg.Ping.Seq, remoteNodeID)
+			}
 		}
 	})
 
