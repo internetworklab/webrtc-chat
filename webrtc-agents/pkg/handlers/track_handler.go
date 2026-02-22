@@ -8,12 +8,14 @@ import (
 	"time"
 
 	pkgtracks "webrtc-agents/pkg/tracks"
+	pkgwn "webrtc-agents/pkg/tracks/wn"
 	pkgwsrunner "webrtc-agents/pkg/ws_runner"
 
 	pkgconnreg "example.com/webrtcserver/pkg/connreg"
 	pkgframing "example.com/webrtcserver/pkg/framing"
 
 	"github.com/google/uuid"
+	"github.com/hraban/opus"
 	"github.com/pion/webrtc/v4"
 )
 
@@ -542,8 +544,30 @@ func (h *TrackHandler) setupPingDataChannel(dc *webrtc.DataChannel, remoteNodeID
 
 // createAndAddTrack creates a new audio track and adds it to the peer connection
 func (h *TrackHandler) createAndAddTrack(entry *PeerConnEntry, remoteNodeID string, signallingTx chan<- pkgframing.MessagePayload) error {
+
+	frameIntv := pkgtracks.DefaultFrameIntv
+	sampleRate := pkgtracks.DefaultSampleRate
+	channels := pkgtracks.DefaultChannelsCount
+	samplesPerPacket := int(float64(frameIntv) / float64(1000) * float64(sampleRate))
+
+	enc, err := opus.NewEncoder(
+		sampleRate,
+		channels,
+		opus.AppAudio,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create encoder: %w", err)
+	}
+
+	packetGen, err := pkgwn.NewOpusWhiteNoiseGenerator(
+		enc, channels, samplesPerPacket, pkgtracks.DefaultMaxPayloadSize,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create white noise RTP packet generator: %w", err)
+	}
+
 	// Create a new audio track
-	track, err := pkgtracks.NewMyWHTrack(fmt.Sprintf("stream-%s", remoteNodeID))
+	track, err := pkgtracks.NewTrackHandle(fmt.Sprintf("stream-%s", remoteNodeID), frameIntv, packetGen)
 	if err != nil {
 		return fmt.Errorf("failed to create track: %w", err)
 	}

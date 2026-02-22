@@ -9,20 +9,18 @@ import (
 )
 
 type OpusWhiteNoiseGenerator struct {
-	opusEncoder      *opus.Encoder
-	samplesPerPacket int
-	numChannels      int
-	pcmBuf           []int16
-	encodeBuf        []byte
+	opusEncoder *opus.Encoder
+	numChannels int
+	pcmBuf      []int16
+	encodeBuf   []byte
 }
 
 func NewOpusWhiteNoiseGenerator(opusEncoder *opus.Encoder, numChannels int, samplesPerPacket int, maximumPayloadSize int) (*OpusWhiteNoiseGenerator, error) {
 	whGen := &OpusWhiteNoiseGenerator{
-		opusEncoder:      opusEncoder,
-		samplesPerPacket: samplesPerPacket,
-		numChannels:      numChannels,
-		pcmBuf:           make([]int16, samplesPerPacket*numChannels),
-		encodeBuf:        make([]byte, maximumPayloadSize),
+		opusEncoder: opusEncoder,
+		numChannels: numChannels,
+		pcmBuf:      make([]int16, samplesPerPacket*numChannels),
+		encodeBuf:   make([]byte, maximumPayloadSize),
 	}
 
 	return whGen, nil

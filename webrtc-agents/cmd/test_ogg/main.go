@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"log"
-	"math/rand"
 	"time"
 
 	pkgwn "webrtc-agents/pkg/tracks/wn"
@@ -98,37 +97,7 @@ func (track *MyWHTrack) encodeAndSend(ssrc uint32, selectedCodec webrtc.RTPCodec
 }
 
 func (track *MyWHTrack) StartWriting(duration time.Duration, ssrc uint32, selectedCodec webrtc.RTPCodecParameters, writer *oggwriter.OggWriter) {
-	// refer to [rfc7587](https://datatracker.ietf.org/doc/html/rfc7587)
-	// for the browser support of codecs, refer to https://developer.mozilla.org/en-US/docs/Web/Media/Guides/Formats/WebRTC_codecs
 
-	// sequenceNumber increases by every single packet sent, it's also the sequence number in RTP packet header
-	// by RFC 3550, they should be started at random
-	var sequenceNumber uint16 = uint16(rand.Uint32())
-
-	// timestamp is the timestamp in RTP packet header,
-	// "reflects the sampling instant of the first octet in the RTP data packet."
-	// As an example, for fixed-rate audio
-	// the timestamp clock would likely increment by one for each
-	// sampling period.  If an audio application reads blocks covering
-	// 160 sampling periods from the input device, the timestamp would be
-	// increased by 160 for each such block, regardless of whether the
-	//  block is transmitted in a packet or dropped as silent.
-	// // by RFC 3550, they should be started at random
-	var timestamp uint32 = rand.Uint32()
-
-	totalSamples := int(duration.Seconds() * float64(track.sampleRate))
-	totalPackets := int(float64(totalSamples) / float64(track.samplesPerPacket))
-
-	// pre-populating packets to the receiver's buffer
-	var err error
-	for i := 0; i < totalPackets; i++ {
-		sequenceNumber, timestamp, err = track.encodeAndSend(ssrc, selectedCodec, writer, sequenceNumber, timestamp)
-		if err != nil {
-			log.Println("Failed to encode and send RTP packet")
-			return
-		}
-		log.Printf("Encoded packet, seq=%d, timestamp=%d", sequenceNumber, timestamp)
-	}
 }
 
 func main() {
