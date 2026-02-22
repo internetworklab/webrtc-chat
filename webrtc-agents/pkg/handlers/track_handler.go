@@ -8,6 +8,7 @@ import (
 	"time"
 
 	pkgtracks "webrtc-agents/pkg/tracks"
+	pkgsine "webrtc-agents/pkg/tracks/sine"
 	pkgwn "webrtc-agents/pkg/tracks/wn"
 	pkgwsrunner "webrtc-agents/pkg/ws_runner"
 
@@ -27,6 +28,7 @@ type TrackHandler struct {
 	debug         bool
 	nodeID        string
 	signallingRx  <-chan pkgframing.MessagePayload
+	generators    []pkgtracks.RTPPacketGenerator
 }
 
 func (h *TrackHandler) GetNodeID() string {
@@ -49,12 +51,74 @@ func NewTrackHandler(iceServers []string, debug bool) *TrackHandler {
 		})
 	}
 
-	return &TrackHandler{
+	handler := &TrackHandler{
 		peerConnStore: NewPeerConnStore(),
 		webrtcAPI:     webrtc.NewAPI(),
 		iceServers:    servers,
 		debug:         debug,
+		generators:    []pkgtracks.RTPPacketGenerator{},
 	}
+
+	// Create opus encoder for the generators
+	enc, err := opus.NewEncoder(
+		pkgtracks.DefaultSampleRate,
+		pkgtracks.DefaultChannelsCount,
+		opus.AppAudio,
+	)
+	if err != nil {
+		log.Printf("failed to create opus encoder: %v", err)
+		return handler
+	}
+
+	samplesPerPacket := int(float64(pkgtracks.DefaultFrameIntv.Seconds()) * float64(pkgtracks.DefaultSampleRate))
+
+	// Create C4 sine wave generator (261.63 Hz)
+	c4Gen, err := pkgsine.NewOpusSineWaveformGenerator(
+		"C4",
+		enc,
+		pkgtracks.DefaultChannelsCount,
+		samplesPerPacket,
+		pkgtracks.DefaultMaxPayloadSize,
+		261.63,
+		pkgtracks.DefaultSampleRate,
+	)
+	if err != nil {
+		log.Printf("failed to create C4 generator: %v", err)
+		return handler
+	}
+	handler.generators = append(handler.generators, c4Gen)
+
+	// Create A4 sine wave generator (440 Hz)
+	a4Gen, err := pkgsine.NewOpusSineWaveformGenerator(
+		"A4",
+		enc,
+		pkgtracks.DefaultChannelsCount,
+		samplesPerPacket,
+		pkgtracks.DefaultMaxPayloadSize,
+		440.0,
+		pkgtracks.DefaultSampleRate,
+	)
+	if err != nil {
+		log.Printf("failed to create A4 generator: %v", err)
+		return handler
+	}
+	handler.generators = append(handler.generators, a4Gen)
+
+	// Create White Noise generator
+	whiteNoiseGen, err := pkgwn.NewOpusWhiteNoiseGenerator(
+		"WhiteNoise",
+		enc,
+		pkgtracks.DefaultChannelsCount,
+		samplesPerPacket,
+		pkgtracks.DefaultMaxPayloadSize,
+	)
+	if err != nil {
+		log.Printf("failed to create WhiteNoise generator: %v", err)
+		return handler
+	}
+	handler.generators = append(handler.generators, whiteNoiseGen)
+
+	return handler
 }
 
 // Serve starts the WebRTC handler
@@ -560,14 +624,14 @@ func (h *TrackHandler) createAndAddTrack(entry *PeerConnEntry, remoteNodeID stri
 	}
 
 	packetGen, err := pkgwn.NewOpusWhiteNoiseGenerator(
-		enc, channels, samplesPerPacket, pkgtracks.DefaultMaxPayloadSize,
+		"WhiteNoise", enc, channels, samplesPerPacket, pkgtracks.DefaultMaxPayloadSize,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create white noise RTP packet generator: %w", err)
 	}
 
 	// Create a new audio track
-	track, err := pkgtracks.NewTrackHandle(fmt.Sprintf("stream-%s", remoteNodeID), frameIntv, packetGen)
+	track, err := pkgtracks.NewTrackHandle(fmt.Sprintf("stream-%s", remoteNodeID), frameIntv, sampleRate, channels, packetGen)
 	if err != nil {
 		return fmt.Errorf("failed to create track: %w", err)
 	}

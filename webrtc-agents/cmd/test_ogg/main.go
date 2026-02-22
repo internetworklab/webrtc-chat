@@ -35,7 +35,7 @@ func main() {
 
 	frequency := 440.0 // A4 note (440 Hz)
 	packetGen, err := pkgsine.NewOpusSineWaveformGenerator(
-		enc, channels, samplesPerPacket, pkgtracks.DefaultMaxPayloadSize, frequency, sampleRate,
+		"A4", enc, channels, samplesPerPacket, pkgtracks.DefaultMaxPayloadSize, frequency, sampleRate,
 	)
 	if err != nil {
 		log.Fatalf("failed to create sine waveform RTP packet generator: %v", err)

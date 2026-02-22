@@ -15,9 +15,11 @@ type OpusSineWaveformGenerator struct {
 	encodeBuf   []byte
 	frequency   float64
 	sampleRate  int
+	name        string
 }
 
 func NewOpusSineWaveformGenerator(
+	name string,
 	opusEncoder *opus.Encoder,
 	numChannels int,
 	samplesPerPacket int,
@@ -26,6 +28,7 @@ func NewOpusSineWaveformGenerator(
 	sampleRate int,
 ) (*OpusSineWaveformGenerator, error) {
 	whGen := &OpusSineWaveformGenerator{
+		name:        name,
 		opusEncoder: opusEncoder,
 		numChannels: numChannels,
 		pcmBuf:      make([]int16, samplesPerPacket*numChannels),
@@ -72,4 +75,8 @@ func (generator *OpusSineWaveformGenerator) GetPacket(ssrc uint32, payloadType u
 		Header:  rtpHeader,
 		Payload: encodeBuf[:n],
 	}, nil
+}
+
+func (generator *OpusSineWaveformGenerator) GetName() string {
+	return generator.name
 }

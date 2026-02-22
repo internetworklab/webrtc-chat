@@ -13,10 +13,12 @@ type OpusWhiteNoiseGenerator struct {
 	numChannels int
 	pcmBuf      []int16
 	encodeBuf   []byte
+	name        string
 }
 
-func NewOpusWhiteNoiseGenerator(opusEncoder *opus.Encoder, numChannels int, samplesPerPacket int, maximumPayloadSize int) (*OpusWhiteNoiseGenerator, error) {
+func NewOpusWhiteNoiseGenerator(name string, opusEncoder *opus.Encoder, numChannels int, samplesPerPacket int, maximumPayloadSize int) (*OpusWhiteNoiseGenerator, error) {
 	whGen := &OpusWhiteNoiseGenerator{
+		name:        name,
 		opusEncoder: opusEncoder,
 		numChannels: numChannels,
 		pcmBuf:      make([]int16, samplesPerPacket*numChannels),
@@ -50,4 +52,8 @@ func (generator *OpusWhiteNoiseGenerator) GetPacket(ssrc uint32, payloadType uin
 		Header:  rtpHeader,
 		Payload: encodeBuf[:n],
 	}, nil
+}
+
+func (generator *OpusWhiteNoiseGenerator) GetName() string {
+	return generator.name
 }
