@@ -17,7 +17,7 @@ func main() {
 	frameIntv := pkgtracks.DefaultFrameIntv
 	sampleRate := pkgtracks.DefaultSampleRate
 	channels := pkgtracks.DefaultChannelsCount
-	samplesPerPacket := int(float64(frameIntv) / float64(1000) * float64(sampleRate))
+	samplesPerPacket := int(float64(frameIntv.Seconds()) * float64(sampleRate))
 	var ssrc uint32 = 1
 	codecUsed := webrtc.RTPCodecParameters{
 		RTPCodecCapability: webrtc.RTPCodecCapability{webrtc.MimeTypeOpus, 48000, 2, "minptime=10;useinbandfec=1", nil},
@@ -30,20 +30,20 @@ func main() {
 		opus.AppAudio,
 	)
 	if err != nil {
-		log.Fatalf("failed to create encoder: %w", err)
+		log.Fatalf("failed to create encoder: %v", err)
 	}
 
 	packetGen, err := pkgwn.NewOpusWhiteNoiseGenerator(
 		enc, channels, samplesPerPacket, pkgtracks.DefaultMaxPayloadSize,
 	)
 	if err != nil {
-		log.Fatalf("failed to create white noise RTP packet generator: %w", err)
+		log.Fatalf("failed to create white noise RTP packet generator: %v", err)
 	}
 
 	// Create a new audio track
 	track, err := pkgtracks.NewTrackHandle(uuid.New().String(), frameIntv, sampleRate, channels, packetGen)
 	if err != nil {
-		log.Fatalf("failed to create track: %w", err)
+		log.Fatalf("failed to create track: %v", err)
 	}
 
 	writer, err := oggwriter.New("test.ogg", uint32(sampleRate), uint16(channels))

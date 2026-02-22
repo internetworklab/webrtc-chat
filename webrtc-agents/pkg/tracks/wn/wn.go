@@ -35,7 +35,7 @@ func (track *OpusWhiteNoiseGenerator) GetPacket(ssrc uint32, payloadType uint8, 
 	encodeBuf := track.encodeBuf
 	n, err := track.opusEncoder.Encode(pcmBuf, encodeBuf)
 	if err != nil {
-		return nil, fmt.Errorf("failed to encode payload: %w", err)
+		return nil, fmt.Errorf("failed to encode payload: %w\nssrc=%d,payloadType=%d,len(pcmBuf)=%d,len(encodeBuf)=%d", err, ssrc, payloadType, len(pcmBuf), len(encodeBuf))
 	}
 
 	rtpHeader := rtp.Header{

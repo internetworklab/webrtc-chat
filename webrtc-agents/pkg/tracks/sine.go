@@ -54,7 +54,7 @@ func NewTrackHandle(streamId string, frameIntv time.Duration, sampleRate int, nu
 		packetGen:             packetGen,
 	}
 
-	wh.samplesPerPacket = int(float64(wh.frameIntv) / float64(1000) * float64(wh.sampleRate))
+	wh.samplesPerPacket = int(float64(wh.frameIntv.Seconds()) * float64(wh.sampleRate))
 
 	return wh, nil
 }
@@ -76,11 +76,11 @@ func (track *TrackHandle) encodeAndSend(
 	timestamp uint32) (uint16, uint32, error) {
 	pkt, err := track.packetGen.GetPacket(ssrc, payloadType, sequenceNumber, timestamp)
 	if err != nil {
-		return sequenceNumber, timestamp, err
+		return sequenceNumber, timestamp, fmt.Errorf("failed to get packet: %w", err)
 	}
 
 	if _, err := writer.WriteRTP(&pkt.Header, pkt.Payload); err != nil {
-		return sequenceNumber, timestamp, err
+		return sequenceNumber, timestamp, fmt.Errorf("failed to write RTP packet: %w", err)
 	}
 
 	sequenceNumber++
@@ -186,10 +186,9 @@ func (track *TrackHandle) WriteTo(duration time.Duration, ssrc uint32, payloadTy
 	for i := 0; i < totalPackets; i++ {
 		sequenceNumber, timestamp, err = track.encodeAndSend(ssrc, payloadType, rtpWriter, sequenceNumber, timestamp)
 		if err != nil {
-			log.Println("Failed to encode and send RTP packet")
+			log.Println("Failed to encode and send RTP packet", err)
 			return
 		}
-		log.Printf("Encoded packet, seq=%d, timestamp=%d", sequenceNumber, timestamp)
 	}
 }
 
