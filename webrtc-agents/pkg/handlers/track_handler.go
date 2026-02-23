@@ -549,9 +549,31 @@ func (h *TrackHandler) setupChatDataChannel(dc *webrtc.DataChannel, remoteNodeID
 			return
 		}
 
+		if chatMsg.ACK != nil {
+			return
+		}
+
 		// Handle commands
 		if chatMsg.Message != nil {
+
 			msg := *chatMsg.Message
+
+			// Send ACK for the received message first
+			ackMsg := ChatMessage{
+				MessageID:  uuid.New().String(),
+				FromNodeID: chatMsg.ToNodeID,
+				ToNodeID:   chatMsg.FromNodeID,
+				Timestamp:  time.Now().UnixMilli(),
+				ACK: &ChatMessageACK{
+					MessageID: chatMsg.MessageID,
+				},
+			}
+			ackData, err := json.Marshal(ackMsg)
+			if err != nil {
+				log.Printf("[webrtc] Failed to marshal ACK message: %v", err)
+			} else if err := dc.SendText(string(ackData)); err != nil {
+				log.Printf("[webrtc] Failed to send ACK: %v", err)
+			}
 
 			// Handle /list command - list all available tracks
 			if msg == "/list" {
@@ -612,23 +634,6 @@ func (h *TrackHandler) setupChatDataChannel(dc *webrtc.DataChannel, remoteNodeID
 				}
 				return
 			}
-		}
-
-		// Send ACK for the received message first
-		ackMsg := ChatMessage{
-			MessageID:  uuid.New().String(),
-			FromNodeID: chatMsg.ToNodeID,
-			ToNodeID:   chatMsg.FromNodeID,
-			Timestamp:  time.Now().UnixMilli(),
-			ACK: &ChatMessageACK{
-				MessageID: chatMsg.MessageID,
-			},
-		}
-		ackData, err := json.Marshal(ackMsg)
-		if err != nil {
-			log.Printf("[webrtc] Failed to marshal ACK message: %v", err)
-		} else if err := dc.SendText(string(ackData)); err != nil {
-			log.Printf("[webrtc] Failed to send ACK: %v", err)
 		}
 
 	})
