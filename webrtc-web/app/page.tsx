@@ -915,6 +915,27 @@ function attachPeerConnectionEventListeners(
       return;
     }
 
+    // Debug track state
+    console.log(
+      `[dbg]${logSource} Track state from ${remoteNodeId}:`,
+      "muted:",
+      event.track.muted,
+      "enabled:",
+      event.track.enabled,
+      "readyState:",
+      event.track.readyState,
+      "settings:",
+      event.track.getSettings(),
+    );
+
+    // Listen for mute/unmute events
+    event.track.onmute = () => {
+      console.log(`[dbg]${logSource} Track from ${remoteNodeId} is MUTED`);
+    };
+    event.track.onunmute = () => {
+      console.log(`[dbg]${logSource} Track from ${remoteNodeId} is UNMUTED`);
+    };
+
     const globalAudioCtx = audioCtxRef.current;
     if (!globalAudioCtx) {
       throw new Error(
@@ -2022,46 +2043,92 @@ export default function Home() {
                             const url = URL.createObjectURL(file);
                             const audio = new Audio(url);
                             audio.muted = true;
-                            if ((audio as any).captureStream) {
-                              const stream = (
-                                audio as any
-                              ).captureStream() as MediaStream;
-                              if (stream) {
-                                stream.onaddtrack = (trackEv) => {
-                                  const track = trackEv.track;
-                                  if (track && track.kind === "audio") {
-                                    const resp = pc.addTrack(track);
-                                    createAndSendOffer(
-                                      pc,
-                                      wsRef,
-                                      nodeIdRef.current,
-                                      toNodeId,
-                                    )
-                                      .then(() => {
-                                        console.log(
-                                          "[dbg] [track] offer is created and sent to remote peer",
-                                          toNodeId,
-                                        );
-                                      })
-                                      .catch((e) => {
-                                        console.error(
-                                          `[dbg] [track] failed to create offer to remote peer`,
-                                          toNodeId,
-                                          e,
-                                        );
-                                      });
-                                    console.log("[dbg] [track] added:", resp);
-                                  }
-                                };
-                                stream.onremovetrack = (trackEv) => {
+                            audio.oncanplay = () => {
+                              console.log(
+                                "[dbg] [track-sender] Audio can play, duration:",
+                                audio.duration,
+                              );
+                            };
+                            audio.onplay = () => {
+                              console.log(
+                                "[dbg] [track-sender] Audio started playing",
+                              );
+                            };
+                            audio.onerror = (e) => {
+                              console.error(
+                                "[dbg] [track-sender] Audio error:",
+                                e,
+                              );
+                            };
+                            audio.play().then(() => {
+                              if ((audio as any).captureStream) {
+                                const stream = (
+                                  audio as any
+                                ).captureStream() as MediaStream;
+                                if (stream) {
                                   console.log(
-                                    "[dbg] [track] removeTrack:",
-                                    trackEv,
+                                    "[dbg] [track-sender] Stream captured, tracks:",
+                                    stream.getTracks().map((t) => ({
+                                      kind: t.kind,
+                                      id: t.id,
+                                      enabled: t.enabled,
+                                      muted: t.muted,
+                                      readyState: t.readyState,
+                                    })),
                                   );
-                                };
-                                audio.play();
+
+                                  stream.onaddtrack = (trackEv) => {
+                                    const track = trackEv.track;
+                                    console.log(
+                                      "[dbg] [track-sender] onaddtrack fired:",
+                                      track.kind,
+                                      "muted:",
+                                      track.muted,
+                                      "enabled:",
+                                      track.enabled,
+                                      "readyState:",
+                                      track.readyState,
+                                      "settings:",
+                                      track.getSettings(),
+                                    );
+                                    if (track && track.kind === "audio") {
+                                      const sender = pc.addTrack(track);
+                                      console.log(
+                                        "[dbg] [track-sender] Track added to PC, sender:",
+                                        sender,
+                                        "track:",
+                                        sender.track,
+                                      );
+                                      createAndSendOffer(
+                                        pc,
+                                        wsRef,
+                                        nodeIdRef.current,
+                                        toNodeId,
+                                      )
+                                        .then(() => {
+                                          console.log(
+                                            "[dbg] [track-sender] offer is created and sent to remote peer",
+                                            toNodeId,
+                                          );
+                                        })
+                                        .catch((e) => {
+                                          console.error(
+                                            `[dbg] [track-sender] failed to create offer to remote peer`,
+                                            toNodeId,
+                                            e,
+                                          );
+                                        });
+                                    }
+                                  };
+                                  stream.onremovetrack = (trackEv) => {
+                                    console.log(
+                                      "[dbg] [track-sender] removeTrack:",
+                                      trackEv,
+                                    );
+                                  };
+                                }
                               }
-                            }
+                            });
 
                             continue;
                           }
