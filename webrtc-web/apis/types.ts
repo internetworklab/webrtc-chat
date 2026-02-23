@@ -173,6 +173,20 @@ export type ChatMessageACK = {
   messageId: string;
 };
 
+export interface ChatMessageSongTrack {
+  // The track we use to retrieve the waveform of the song/music
+  // if this is nil, then the track is not ready to play
+  track?: MediaStreamTrack;
+
+  // mostly like be the name of the song/music
+  label: string;
+
+  started?: boolean;
+
+  // some value between [0,1], 0.5 if not present
+  volume?: number;
+}
+
 export type ChatMessage = {
   // message uuid, globally unique, to prevent a message from being queued multiple times.
   messageId: string;
@@ -182,6 +196,7 @@ export type ChatMessage = {
 
   file?: ChatMessageFile;
   ping?: ChatMessagePing;
+  songTrack?: ChatMessageSongTrack;
 
   // receiver client should delete specified message when received this request
   delete?: ChatMessageDelete;

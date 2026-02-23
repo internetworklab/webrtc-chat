@@ -4,10 +4,17 @@ import {
   ChatMessage,
   ChatMessageFile,
   ChatMessageFileCategory,
+  ChatMessageSongTrack,
   FileTransferStatusEntry,
   Preference,
 } from "@/apis/types";
-import { InsertDriveFile } from "@mui/icons-material";
+import {
+  InsertDriveFile,
+  PlayArrow,
+  Pause,
+  VolumeUp,
+  MusicNote,
+} from "@mui/icons-material";
 import {
   Box,
   Card,
@@ -17,6 +24,8 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
+  IconButton,
+  Slider,
 } from "@mui/material";
 import { Fragment } from "react/jsx-runtime";
 import { RenderAvatar } from "./RenderAvatar";
@@ -279,6 +288,141 @@ function RenderGenericAttachment(props: {
   }
 }
 
+function RenderSongTrack(props: { songTrackMsgPayload: ChatMessageSongTrack }) {
+  const { songTrackMsgPayload } = props;
+  const isPlaying = songTrackMsgPayload.started ?? false;
+  const volume = songTrackMsgPayload.volume ?? 0.5;
+  const hasTrack = songTrackMsgPayload.track !== undefined;
+
+  return (
+    <Box
+      sx={{
+        display: "flex",
+        alignItems: "center",
+        padding: 2,
+        minWidth: 280,
+        maxWidth: 400,
+        opacity: hasTrack ? 1 : 0.6,
+      }}
+    >
+      {/* Album art / Music icon */}
+      <Box
+        sx={{
+          width: 56,
+          height: 56,
+          borderRadius: 1,
+          backgroundColor: "primary.main",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          marginRight: 2,
+          flexShrink: 0,
+        }}
+      >
+        <MusicNote sx={{ fontSize: 32, color: "white" }} />
+      </Box>
+
+      {/* Track info and controls */}
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        {/* Track name */}
+        <Typography
+          variant="subtitle1"
+          noWrap
+          sx={{ fontWeight: 500, marginBottom: 1 }}
+        >
+          {songTrackMsgPayload.label || "Unknown Track"}
+        </Typography>
+
+        {/* Progress bar / waveform visualization */}
+        <Box
+          sx={{
+            height: 4,
+            backgroundColor: "divider",
+            borderRadius: 2,
+            marginBottom: 1,
+            position: "relative",
+            overflow: "hidden",
+          }}
+        >
+          <Box
+            sx={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              height: "100%",
+              width: isPlaying ? "60%" : "0%",
+              backgroundColor: "primary.main",
+              borderRadius: 2,
+              transition: "width 0.3s ease",
+            }}
+          />
+        </Box>
+
+        {/* Controls row */}
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          {/* Play/Pause button */}
+          <IconButton
+            size="small"
+            disabled={!hasTrack}
+            sx={{
+              backgroundColor: "primary.main",
+              color: "white",
+              "&:hover": {
+                backgroundColor: "primary.dark",
+              },
+              "&.Mui-disabled": {
+                backgroundColor: "primary.light",
+                color: "white",
+                opacity: 0.5,
+              },
+            }}
+          >
+            {isPlaying ? (
+              <Pause fontSize="small" />
+            ) : (
+              <PlayArrow fontSize="small" />
+            )}
+          </IconButton>
+
+          {/* Volume control */}
+          <VolumeUp sx={{ fontSize: 18, color: "text.secondary" }} />
+          <Slider
+            size="small"
+            value={volume * 100}
+            disabled={!hasTrack}
+            sx={{
+              flex: 1,
+              marginLeft: 0.5,
+              "& .MuiSlider-thumb": {
+                width: 12,
+                height: 12,
+              },
+            }}
+          />
+
+          {/* Volume percentage */}
+          <Typography
+            variant="caption"
+            sx={{ color: "text.secondary", minWidth: 35 }}
+          >
+            {Math.round(volume * 100)}%
+          </Typography>
+        </Box>
+
+        {/* Status indicator */}
+        {!hasTrack && (
+          <Typography
+            variant="caption"
+            sx={{ color: "text.secondary", fontStyle: "italic" }}
+          >
+            Track loading...
+          </Typography>
+        )}
+      </Box>
+    </Box>
+  );
+}
+
 export function RenderMessage(props: {
   message: ChatMessage;
   onAmend?: (amendedMsg: ChatMessage) => void;
@@ -339,6 +483,9 @@ export function RenderMessage(props: {
               alt={message.message || ""}
               fileTransferStatus={fileTransferStatus}
             />
+          )}
+          {message.songTrack && (
+            <RenderSongTrack songTrackMsgPayload={message.songTrack} />
           )}
           {message.message && (
             <Box

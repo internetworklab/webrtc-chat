@@ -2004,6 +2004,28 @@ export default function Home() {
                     position: "relative",
                   }}
                 >
+                  <RenderMessage
+                    message={{
+                      messageId: "1",
+                      fromNodeId: nodeId,
+                      toNodeId: activeConn,
+                      acked: true,
+                      songTrack: {
+                        label: "Some Mock Random Song",
+                      },
+                      timestamp: 1771823754093,
+                    }}
+                    onAmend={(amendedMsg) => {
+                      sendAmendMsg(amendedMsg);
+                    }}
+                    onDelete={(deletedMsgId) => {
+                      sendMsgDeleteRequest(activeConn, deletedMsgId);
+                    }}
+                    fileTransferStatus={
+                      connTrackStatus?.[activeConn]?.fileTransferStatus ?? {}
+                    }
+                    userPreferenceMap={userPreferenceMap}
+                  />
                   {messages.map((message) => (
                     <RenderMessage
                       message={message}
@@ -2039,99 +2061,6 @@ export default function Home() {
                       const toNodeId = activeConn;
                       if (filelist && filelist.length > 0 && pc && chatDC) {
                         for (const file of filelist) {
-                          if (file.name === "testsong-2.ogg") {
-                            const url = URL.createObjectURL(file);
-                            const audio = new Audio(url);
-                            audio.muted = true;
-                            audio.oncanplay = () => {
-                              console.log(
-                                "[dbg] [track-sender] Audio can play, duration:",
-                                audio.duration,
-                              );
-                            };
-                            audio.onplay = () => {
-                              console.log(
-                                "[dbg] [track-sender] Audio started playing",
-                              );
-                            };
-                            audio.onerror = (e) => {
-                              console.error(
-                                "[dbg] [track-sender] Audio error:",
-                                e,
-                              );
-                            };
-                            audio.play().then(() => {
-                              if ((audio as any).captureStream) {
-                                const stream = (
-                                  audio as any
-                                ).captureStream() as MediaStream;
-                                if (stream) {
-                                  console.log(
-                                    "[dbg] [track-sender] Stream captured, tracks:",
-                                    stream.getTracks().map((t) => ({
-                                      kind: t.kind,
-                                      id: t.id,
-                                      enabled: t.enabled,
-                                      muted: t.muted,
-                                      readyState: t.readyState,
-                                    })),
-                                  );
-
-                                  stream.onaddtrack = (trackEv) => {
-                                    const track = trackEv.track;
-                                    console.log(
-                                      "[dbg] [track-sender] onaddtrack fired:",
-                                      track.kind,
-                                      "muted:",
-                                      track.muted,
-                                      "enabled:",
-                                      track.enabled,
-                                      "readyState:",
-                                      track.readyState,
-                                      "settings:",
-                                      track.getSettings(),
-                                    );
-                                    if (track && track.kind === "audio") {
-                                      const sender = pc.addTrack(track);
-                                      console.log(
-                                        "[dbg] [track-sender] Track added to PC, sender:",
-                                        sender,
-                                        "track:",
-                                        sender.track,
-                                      );
-                                      createAndSendOffer(
-                                        pc,
-                                        wsRef,
-                                        nodeIdRef.current,
-                                        toNodeId,
-                                      )
-                                        .then(() => {
-                                          console.log(
-                                            "[dbg] [track-sender] offer is created and sent to remote peer",
-                                            toNodeId,
-                                          );
-                                        })
-                                        .catch((e) => {
-                                          console.error(
-                                            `[dbg] [track-sender] failed to create offer to remote peer`,
-                                            toNodeId,
-                                            e,
-                                          );
-                                        });
-                                    }
-                                  };
-                                  stream.onremovetrack = (trackEv) => {
-                                    console.log(
-                                      "[dbg] [track-sender] removeTrack:",
-                                      trackEv,
-                                    );
-                                  };
-                                }
-                              }
-                            });
-
-                            continue;
-                          }
                           transmitFileViaPC(
                             pc,
                             chatDC,
