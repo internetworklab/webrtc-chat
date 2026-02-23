@@ -29,7 +29,7 @@ import {
 } from "@mui/material";
 import { Fragment } from "react/jsx-runtime";
 import { RenderAvatar } from "./RenderAvatar";
-import { useRef, useState } from "react";
+import { RefObject, useEffect, useRef, useState } from "react";
 import { SP } from "next/dist/shared/lib/utils";
 
 function getFileLoadedRatio(
@@ -288,13 +288,77 @@ function RenderGenericAttachment(props: {
   }
 }
 
-function RenderSongTrack(props: { songTrackMsgPayload: ChatMessageSongTrack }) {
-  const { songTrackMsgPayload } = props;
-  const isPlaying = songTrackMsgPayload.started ?? false;
-  const volume = songTrackMsgPayload.volume ?? 0.5;
-  const hasTrack = songTrackMsgPayload.track !== undefined;
+function playSong(
+  track: AudioNode | AudioScheduledSourceNode,
+  audioContextRef: RefObject<AudioContext | null>,
+  gainNode: GainNode,
+  volume: number,
+) {
+  const audioContext = audioContextRef.current;
+  if (audioContext) {
+    track.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    gainNode.gain.value = volumeToGainValue(
+      volume,
+      gainNode.gain.minValue,
+      gainNode.gain.maxValue,
+    );
+    if ("start" in track) {
+      track.start();
+    }
+  }
+}
+
+function stopSong(
+  track: AudioNode | AudioScheduledSourceNode,
+  audioContextRef: RefObject<AudioContext | null>,
+  gainNode: GainNode,
+) {
+  const audioContext = audioContextRef.current;
+  if (audioContext) {
+    if ("stop" in track) {
+      track.stop();
+    }
+    track.disconnect();
+    gainNode.disconnect();
+  }
+}
+
+const defaultVolume = 0.5;
+
+// vol is something between 0 and 1
+function volumeToGainValue(vol: number, min: number, max: number) {
+  return vol;
+  return min + (max - min) * vol;
+}
+
+function RenderSongTrack(props: {
+  audioContextRef: RefObject<AudioContext | null>;
+  songTrackMsgPayload: ChatMessageSongTrack;
+}) {
+  const { songTrackMsgPayload, audioContextRef } = props;
+  const [isPlaying, setIsPlaying] = useState<boolean>(false);
+  const [volume, setVolume] = useState<number>(
+    songTrackMsgPayload.volume ?? defaultVolume,
+  );
 
   const hasThumbnail = songTrackMsgPayload.thumbnail !== undefined;
+  const track = songTrackMsgPayload.track;
+
+  const gainNodeRef = useRef<GainNode | null>(null);
+  useEffect(() => {
+    if (!gainNodeRef.current) {
+      const gainNode = audioContextRef.current?.createGain();
+      if (gainNode) {
+        gainNodeRef.current = gainNode;
+        gainNode.gain.value = volumeToGainValue(
+          volume,
+          gainNode.gain.minValue,
+          gainNode.gain.maxValue,
+        );
+      }
+    }
+  }, []);
 
   return (
     <Box
@@ -366,7 +430,7 @@ function RenderSongTrack(props: { songTrackMsgPayload: ChatMessageSongTrack }) {
           {/* Play/Pause button */}
           <IconButton
             size="small"
-            disabled={!hasTrack}
+            disabled={!track}
             sx={{
               backgroundColor: "primary.main",
               color: "white",
@@ -378,6 +442,18 @@ function RenderSongTrack(props: { songTrackMsgPayload: ChatMessageSongTrack }) {
                 color: "white",
                 opacity: 0.5,
               },
+            }}
+            onClick={() => {
+              const gainNode = gainNodeRef.current;
+              if (track && gainNode) {
+                if (isPlaying) {
+                  stopSong(track, audioContextRef, gainNode);
+                  setIsPlaying(false);
+                } else {
+                  playSong(track, audioContextRef, gainNode, volume);
+                  setIsPlaying(true);
+                }
+              }
             }}
           >
             {isPlaying ? (
@@ -392,7 +468,7 @@ function RenderSongTrack(props: { songTrackMsgPayload: ChatMessageSongTrack }) {
           <Slider
             size="small"
             value={volume * 100}
-            disabled={!hasTrack}
+            disabled={!track}
             sx={{
               flex: 1,
               marginLeft: 0.5,
@@ -418,14 +494,21 @@ function RenderSongTrack(props: { songTrackMsgPayload: ChatMessageSongTrack }) {
 
 export function RenderMessage(props: {
   message: ChatMessage;
-  onAmend?: (amendedMsg: ChatMessage) => void;
-  onDelete?: (deletedMsgId: string) => void;
+  onAmend: (amendedMsg: ChatMessage) => void;
+  onDelete: (deletedMsgId: string) => void;
   fileTransferStatus: Record<string, FileTransferStatusEntry>;
   userPreferenceMap: Record<string, Preference>;
+  audioContextRef: RefObject<AudioContext | null>;
 }) {
   // todo: add message edit feature and delete feature in context menu
-  const { message, onAmend, onDelete, fileTransferStatus, userPreferenceMap } =
-    props;
+  const {
+    message,
+    onAmend,
+    onDelete,
+    fileTransferStatus,
+    userPreferenceMap,
+    audioContextRef,
+  } = props;
   const peername = userPreferenceMap[message.fromNodeId]?.name ?? "";
   const peercoloridxprefer =
     userPreferenceMap[message.fromNodeId]?.indexOfPreferColor ?? -1;
@@ -478,7 +561,10 @@ export function RenderMessage(props: {
             />
           )}
           {message.songTrack && (
-            <RenderSongTrack songTrackMsgPayload={message.songTrack} />
+            <RenderSongTrack
+              songTrackMsgPayload={message.songTrack}
+              audioContextRef={audioContextRef}
+            />
           )}
           {message.message && (
             <Box
