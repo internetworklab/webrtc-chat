@@ -1,4 +1,4 @@
-import { ChatMessageFileThumbnail } from "./types";
+import { ChatMessageThumbnail } from "./types";
 
 export type ThumbnailOptions = {
   qualityFactor?: number;
@@ -13,14 +13,14 @@ const defaultThumbnailMIME = "image/jpeg";
 export function createThumbnailFromFile(
   file: File,
   options?: ThumbnailOptions,
-): Promise<ChatMessageFileThumbnail> {
+): Promise<ChatMessageThumbnail> {
   const {
     qualityFactor = defaultQualityFactor,
     maxWidth = defaultMaxWidth,
     thumbnailMIME = defaultThumbnailMIME,
   } = options ?? {};
 
-  return new Promise<ChatMessageFileThumbnail>((resolve, reject) => {
+  return new Promise<ChatMessageThumbnail>((resolve, reject) => {
     const doCreateThumbnail = (
       mediaElement: HTMLImageElement | HTMLVideoElement | null,
     ) => {

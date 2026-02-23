@@ -3,7 +3,7 @@
 import {
   ChatMessage,
   ChatMessageFileCategory,
-  ChatMessageFileThumbnail,
+  ChatMessageThumbnail,
   ChatMessagePing,
   ChatMessagePingDirection,
   ConnEntry,
@@ -1201,7 +1201,7 @@ function transmitFileViaPC(
   fileCat: ChatMessageFileCategory,
   file: File,
   setConnTrackStatus: Dispatch<SetStateAction<ConnTrackStatus>>,
-  thumbnail: ChatMessageFileThumbnail | undefined,
+  thumbnail: ChatMessageThumbnail | undefined,
 ) {
   const fileDC = pc.createDataChannel(PredefinedDCLabel.File);
   fileDC.binaryType = "arraybuffer";

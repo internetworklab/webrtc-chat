@@ -111,7 +111,7 @@ export enum ChatMessageFileCategory {
   Document = "document",
 }
 
-export type ChatMessageFileThumbnail = {
+export type ChatMessageThumbnail = {
   dataURL: string;
   mime: string;
 };
@@ -120,7 +120,7 @@ export type ChatMessageFile = {
   category: ChatMessageFileCategory;
 
   // thumbnail only present when category is ChatMessageFileCategory.Image or ChatMessageFileCategory.Video
-  thumbnail?: ChatMessageFileThumbnail;
+  thumbnail?: ChatMessageThumbnail;
 
   name?: string;
   // size is the total size of the file content, not the transferred(or received) size
@@ -185,6 +185,8 @@ export interface ChatMessageSongTrack {
 
   // some value between [0,1], 0.5 if not present
   volume?: number;
+
+  thumbnail?: ChatMessageThumbnail;
 }
 
 export type ChatMessage = {

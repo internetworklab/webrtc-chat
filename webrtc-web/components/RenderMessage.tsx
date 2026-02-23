@@ -294,6 +294,8 @@ function RenderSongTrack(props: { songTrackMsgPayload: ChatMessageSongTrack }) {
   const volume = songTrackMsgPayload.volume ?? 0.5;
   const hasTrack = songTrackMsgPayload.track !== undefined;
 
+  const hasThumbnail = songTrackMsgPayload.thumbnail !== undefined;
+
   return (
     <Box
       sx={{
@@ -305,22 +307,25 @@ function RenderSongTrack(props: { songTrackMsgPayload: ChatMessageSongTrack }) {
         opacity: hasTrack ? 1 : 0.6,
       }}
     >
-      {/* Album art / Music icon */}
-      <Box
-        sx={{
-          width: 56,
-          height: 56,
-          borderRadius: 1,
-          backgroundColor: "primary.main",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          marginRight: 2,
-          flexShrink: 0,
-        }}
-      >
-        <MusicNote sx={{ fontSize: 32, color: "white" }} />
-      </Box>
+      {/* Album art / Thumbnail - only show if thumbnail exists */}
+      {hasThumbnail && (
+        <Box
+          sx={{
+            width: 56,
+            height: 56,
+            borderRadius: 1,
+            overflow: "hidden",
+            marginRight: 2,
+            flexShrink: 0,
+          }}
+        >
+          <img
+            src={songTrackMsgPayload.thumbnail!.dataURL}
+            alt={songTrackMsgPayload.label || "Album art"}
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          />
+        </Box>
+      )}
 
       {/* Track info and controls */}
       <Box sx={{ flex: 1, minWidth: 0 }}>
