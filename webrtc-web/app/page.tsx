@@ -1318,6 +1318,27 @@ function getPeerUnreadMsgs(
   return unreadPeerMsgs;
 }
 
+function createAndSendOffer(
+  pc: RTCPeerConnection,
+  wsRef: RefObject<WebSocket | null>,
+  localNodeId: string,
+  remoteNodeId: string,
+) {
+  return pc.createOffer().then((offer) => {
+    const offerPayload: SDPOfferPayload = {
+      type: OfferType.Offer,
+      offer_json: JSON.stringify(offer),
+      from_node_id: localNodeId,
+      to_node_id: remoteNodeId,
+    };
+    const offerMsg: MessagePayload = {
+      sdp_offer: offerPayload,
+    };
+    pc.setLocalDescription(offer);
+    wsRef.current?.send(JSON.stringify(offerMsg));
+  });
+}
+
 function determineFollowingMode(msgsBox: HTMLDivElement) {
   const { scrollHeight, clientHeight, scrollTop } = msgsBox;
   const isScrollable = scrollHeight > clientHeight;
@@ -1394,28 +1415,18 @@ export default function Home() {
         onUnread,
       );
 
-      ent.peerConnection
-        .createOffer()
-        .then((offer) => {
-          const offerPayload: SDPOfferPayload = {
-            type: OfferType.Offer,
-            offer_json: JSON.stringify(offer),
-            from_node_id: nodeIdRef.current,
-            to_node_id: remoteNodeId,
-          };
-          const offerMsg: MessagePayload = {
-            sdp_offer: offerPayload,
-          };
-          ent.peerConnection.setLocalDescription(offer);
-          wsRef.current?.send(JSON.stringify(offerMsg));
-        })
-        .catch((e) => {
-          console.error(
-            `[dbg] [${logSource}] failed to create offer to remote peer`,
-            remoteNodeId,
-            e,
-          );
-        });
+      createAndSendOffer(
+        ent.peerConnection,
+        wsRef,
+        nodeIdRef.current,
+        remoteNodeId,
+      ).catch((e) => {
+        console.error(
+          `[dbg] [${logSource}] failed to create offer to remote peer`,
+          remoteNodeId,
+          e,
+        );
+      });
     }
 
     if (ent && (ent.pingSeqRef === undefined || ent.pingSeqRef === null)) {
@@ -2003,6 +2014,25 @@ export default function Home() {
                                   const track = trackEv.track;
                                   if (track && track.kind === "audio") {
                                     const resp = pc.addTrack(track);
+                                    createAndSendOffer(
+                                      pc,
+                                      wsRef,
+                                      nodeIdRef.current,
+                                      toNodeId,
+                                    )
+                                      .then(() => {
+                                        console.log(
+                                          "[dbg] [track] offer is created and sent to remote peer",
+                                          toNodeId,
+                                        );
+                                      })
+                                      .catch((e) => {
+                                        console.error(
+                                          `[dbg] [track] failed to create offer to remote peer`,
+                                          toNodeId,
+                                          e,
+                                        );
+                                      });
                                     console.log("[dbg] [track] added:", resp);
                                   }
                                 };
