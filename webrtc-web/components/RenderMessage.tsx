@@ -343,27 +343,13 @@ function stopSong(
 const defaultVolume = 0.5;
 
 function FFTVisualization(props: {
-  fftSize: number;
   updateIntvMs: number;
   analyzerNodeRef: RefObject<AnalyserNode | null>;
 }) {
-  const { fftSize, updateIntvMs, analyzerNodeRef } = props;
+  const { updateIntvMs, analyzerNodeRef } = props;
   // bins are a series of measures of frequency strengths, in [0, 1], real numbers.
   const [bins, setBins] = useState<number[]>([]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  const addSample = (sample: number) => {
-    setBins((prev) => {
-      if (fftSize <= 0) {
-        return prev;
-      }
-      let newBins = [...prev, sample];
-      if (newBins.length > fftSize) {
-        newBins = newBins.slice(1);
-      }
-      return newBins;
-    });
-  };
 
   useEffect(() => {
     const it = setInterval(() => {
@@ -373,14 +359,13 @@ function FFTVisualization(props: {
       const bufferLength = analyzerNode.frequencyBinCount;
       const dataArray = new Uint8Array(bufferLength);
       analyzerNode.getByteFrequencyData(dataArray);
-      const normalizedData = dataArray.map((value) => value / 255);
-      setBins((prev) => {
-        let newBins = [...prev, ...normalizedData];
-        if (newBins.length > fftSize) {
-          newBins = newBins.slice(1);
-        }
-        return newBins;
-      });
+      const processed = new Float32Array(bufferLength);
+      for (let i = 0; i < processed.length; i++) {
+        processed[i] = dataArray[i] / 256.0;
+      }
+
+      setBins(Array.from(processed));
+      // console.log("[dbg] [bins]:", "origin", dataArray, "processed", processed);
     }, updateIntvMs);
     return () => clearInterval(it);
   }, [updateIntvMs]);
@@ -439,8 +424,8 @@ function FFTVisualization(props: {
 
     // Fill with gradient
     const gradient = ctx.createLinearGradient(0, 0, 0, height);
-    gradient.addColorStop(0, "rgba(25, 118, 210, 0.4)");
-    gradient.addColorStop(1, "rgba(25, 118, 210, 0.1)");
+    gradient.addColorStop(0, "rgba(25, 118, 210, 0.7)");
+    gradient.addColorStop(1, "rgba(25, 118, 210, 0.3)");
     ctx.fillStyle = gradient;
     ctx.fill();
   }, [bins]);
@@ -472,6 +457,7 @@ function RenderSongTrack(props: {
   const sourceNodeRef = useRef<AudioNode | null>(null);
   const analyzerNodeRef = useRef<AnalyserNode | null>(null);
   const fftSize = 128;
+  const updateIntvMs = Math.round(1000 / 30);
 
   return (
     <Fragment>
@@ -486,8 +472,7 @@ function RenderSongTrack(props: {
           }}
         >
           <FFTVisualization
-            fftSize={fftSize}
-            updateIntvMs={20}
+            updateIntvMs={updateIntvMs}
             analyzerNodeRef={analyzerNodeRef}
           />
         </Box>
