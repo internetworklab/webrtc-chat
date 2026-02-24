@@ -770,7 +770,7 @@ function attachPeerConnectionEventListeners(
   connTrackRef: RefObject<ConnTrack>,
 ) {
   if (!audioCtxRef.current) {
-    audioCtxRef.current = new AudioContext({});
+    audioCtxRef.current = new AudioContext();
     console.log("[dbg] [track] audio context created:", audioCtxRef.current);
   }
 

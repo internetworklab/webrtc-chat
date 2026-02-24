@@ -313,6 +313,12 @@ function playSong(
   sourceNodeRef.current!.connect(gainNodeRef.current!);
   gainNodeRef.current!.connect(audioContext.destination);
   audioContext.resume();
+
+  // quirks of Chrome, I have to create a Audio Element to make it happy to play
+  const audio = new Audio();
+  audio.srcObject = new MediaStream([track]);
+  audio.muted = true;
+  audio.play();
 }
 
 function stopSong(
@@ -411,7 +417,7 @@ function RenderSongTrack(props: {
           {/* Play/Pause button */}
           <IconButton
             size="small"
-            disabled={!track}
+            disabled={!track || track.muted}
             sx={{
               backgroundColor: "primary.main",
               color: "white",
