@@ -1,4 +1,4 @@
-package wn
+package sine
 
 import (
 	"fmt"

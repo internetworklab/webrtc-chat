@@ -1,7 +1,6 @@
 package tracks
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"math/rand"
@@ -66,6 +65,18 @@ func getOpusCodecParams(ctx webrtc.TrackLocalContext) *webrtc.RTPCodecParameters
 		}
 	}
 	return nil
+}
+
+// getAvailableCodecs returns a string listing all available codecs for debugging
+func getAvailableCodecs(ctx webrtc.TrackLocalContext) string {
+	var codecs []string
+	for _, codec := range ctx.CodecParameters() {
+		codecs = append(codecs, fmt.Sprintf("%s/%d", codec.RTPCodecCapability.MimeType, codec.RTPCodecCapability.ClockRate))
+	}
+	if len(codecs) == 0 {
+		return "(none)"
+	}
+	return fmt.Sprintf("%v", codecs)
 }
 
 func (track *TrackHandle) encodeAndSend(
@@ -199,7 +210,7 @@ func (track *TrackHandle) Bind(ctx webrtc.TrackLocalContext) (webrtc.RTPCodecPar
 	log.Printf("[track] track %s is binding, ctx id: %s", track.trackId, ctx.ID())
 	codecParam := getOpusCodecParams(ctx)
 	if codecParam == nil {
-		return webrtc.RTPCodecParameters{}, errors.New("no supported codec found, currently only opus is supported")
+		return webrtc.RTPCodecParameters{}, fmt.Errorf("no Opus codec found in negotiation; available codecs: %s. Ensure MediaEngine is configured with Opus 48kHz stereo", getAvailableCodecs(ctx))
 	}
 	if track.stopChan == nil {
 		track.stopChan = make(map[string]chan interface{})

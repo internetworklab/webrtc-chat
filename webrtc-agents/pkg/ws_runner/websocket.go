@@ -8,6 +8,8 @@ import (
 
 	"time"
 
+	pkghandlers "webrtc-agents/pkg/handlers"
+
 	pkgconnreg "example.com/webrtcserver/pkg/connreg"
 	pkgframing "example.com/webrtcserver/pkg/framing"
 
@@ -24,7 +26,7 @@ type WebSocketRunner struct {
 	NodeName              string
 }
 
-func (runner *WebSocketRunner) Run(ctx context.Context) (chan<- pkgframing.MessagePayload, <-chan pkgframing.MessagePayload) {
+func (runner *WebSocketRunner) Run(ctx context.Context, handler pkghandlers.GenericWebRTCHandler) {
 	u := runner.URL
 	txChannel := make(chan pkgframing.MessagePayload)
 	outputDataCh := make(chan pkgframing.MessagePayload)
@@ -48,11 +50,11 @@ func (runner *WebSocketRunner) Run(ctx context.Context) (chan<- pkgframing.Messa
 
 			log.Printf("Sent registration message for node: %s", runner.NodeName)
 
-			wsPinger := &WebSocketPinger{
+			wsPinger := &BasicWSMsgHandler{
 				Intv:  runner.PingIntv,
 				Debug: runner.Debug,
 			}
-			dataCh, errCh := wsPinger.StartPingLoop(ctx, wsConn, txChannel)
+			dataCh, errCh := wsPinger.startMessagesLoop(ctx, wsConn, txChannel)
 			log.Println("Ping/pong loop started")
 
 			go func() {
@@ -75,7 +77,7 @@ func (runner *WebSocketRunner) Run(ctx context.Context) (chan<- pkgframing.Messa
 		}
 	}(ctx)
 
-	return txChannel, outputDataCh
+	handler.Serve(ctx, txChannel, outputDataCh)
 }
 
 type WebSocketRegisterer struct{}
@@ -91,13 +93,13 @@ func (reg *WebSocketRegisterer) Register(wsConn *websocket.Conn, nodeName string
 	return wsConn.WriteJSON(registerMsg)
 }
 
-type WebSocketPinger struct {
+type BasicWSMsgHandler struct {
 	Intv  time.Duration
 	Debug bool
 }
 
 // Start ping goroutine to maintain WebSocket connection
-func (pinger *WebSocketPinger) StartPingLoop(ctx context.Context, wsConn *websocket.Conn, txChannel <-chan pkgframing.MessagePayload) (chan pkgframing.MessagePayload, chan error) {
+func (pinger *BasicWSMsgHandler) startMessagesLoop(ctx context.Context, wsConn *websocket.Conn, txChannel <-chan pkgframing.MessagePayload) (chan pkgframing.MessagePayload, chan error) {
 	period := pinger.Intv
 	debug := pinger.Debug
 
@@ -121,14 +123,16 @@ func (pinger *WebSocketPinger) StartPingLoop(ctx context.Context, wsConn *websoc
 					errCh <- err
 					return
 				}
-				if msg.Echo != nil {
-					if msg.Echo.Direction == pkgconnreg.EchoDirectionS2C && pinger.Debug {
+
+				if msg.Echo != nil && msg.Echo.Direction == pkgconnreg.EchoDirectionS2C {
+					if pinger.Debug {
 						rtt := time.Since(time.UnixMilli(int64(msg.Echo.Timestamp)))
 						log.Printf("Pong received - RTT: %v, CorrelationID: %s, SeqID: %d",
 							rtt, msg.Echo.CorrelationID, msg.Echo.SeqID)
 					}
 					continue
 				}
+
 				dataCh <- msg
 			}
 		}()

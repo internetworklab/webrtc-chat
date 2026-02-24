@@ -3,9 +3,9 @@ package ws_runner
 import (
 	"context"
 
-	pkgframing "example.com/webrtcserver/pkg/framing"
+	pkghandlers "webrtc-agents/pkg/handlers"
 )
 
 type WebSocketSignallingSessionRunner interface {
-	Run(ctx context.Context) (chan<- pkgframing.MessagePayload, <-chan pkgframing.MessagePayload)
+	Run(ctx context.Context, handler pkghandlers.GenericWebRTCHandler)
 }

@@ -13,6 +13,7 @@ import (
 	pkgwsrunner "webrtc-agents/pkg/ws_runner"
 
 	"github.com/alecthomas/kong"
+	"github.com/pion/webrtc/v4"
 )
 
 var cli struct {
@@ -39,28 +40,86 @@ func main() {
 	defer cancel()
 
 	var echoBotHandler pkghandlers.GenericWebRTCHandler
-	echoBotHandler = pkghandlers.NewEchoHandler(cli.ICEServer, cli.Debug)
-	go echoBotHandler.Run(ctx, &pkgwsrunner.WebSocketRunner{
+	echoBotHandler = pkghandlers.NewSignallingHandler(pkghandlers.WithPingHandler(&pkghandlers.EchoDCHandler{}), cli.ICEServer, cli.Debug, nil)
+	echoBotRunner := &pkgwsrunner.WebSocketRunner{
 		URL:                   *u,
 		PingIntv:              cli.PingPeriod,
 		Debug:                 cli.Debug,
 		ReconnectOnDisconnect: cli.ReconnectOnDisconnect,
 		ReconnectDelay:        cli.ReconnectDelay,
 		NodeName:              "EchoBot",
-	})
+	}
+	go echoBotRunner.Run(ctx, echoBotHandler)
 	log.Println("Echo bot started!")
 
+	// MediaEngine Configuration:
+	// The handler creates a MediaEngine that registers only the Opus codec with the following parameters:
+	//   - MimeType:    webrtc.MimeTypeOpus ("audio/opus")
+	//   - ClockRate:   48000 Hz
+	//   - Channels:    2 (stereo)
+	//   - SDPFmtpLine: "minptime=10;useinbandfec=1"
+	//   - PayloadType: 111 (standard for Opus)
+	//
+	// This constraint ensures that:
+	// 1. SDP offers/answers only include Opus codec
+	// 2. Negotiation will fail if the peer doesn't support Opus 48kHz stereo
+	// 3. Audio tracks can safely assume Opus encoding parameters
+	//
+	// The MediaEngine is used by the webrtc.API when creating new peer connections,
+	// which automatically constrains all codec negotiations to the registered codecs.
+
+	// Create MediaEngine and register only Opus codec (48kHz stereo)
+	// This constrains negotiation to only support what we can stream
+	mediaEngine := &webrtc.MediaEngine{}
+
+	// Register Opus codec with specific parameters matching our audio pipeline
+	// see: https://github.com/pion/webrtc/blob/96cbf971e272f466aaa68cbdfe927fe947426869/mediaengine.go#L69
+	opusCodec := webrtc.RTPCodecParameters{
+		RTPCodecCapability: webrtc.RTPCodecCapability{
+			MimeType:    webrtc.MimeTypeOpus,
+			ClockRate:   48000,
+			Channels:    2,
+			SDPFmtpLine: "minptime=10;useinbandfec=1",
+		},
+		PayloadType: 111, // Standard payload type for Opus
+	}
+
+	if err := mediaEngine.RegisterCodec(opusCodec, webrtc.RTPCodecTypeAudio); err != nil {
+		log.Fatalf("Failed to register Opus codec: %v", err)
+	}
+
+	// Create API with the constrained MediaEngine
+	api := webrtc.NewAPI(webrtc.WithMediaEngine(mediaEngine))
+
 	var musicBotHandler pkghandlers.GenericWebRTCHandler
-	musicBotHandler = pkghandlers.NewTrackHandler(cli.ICEServer, cli.Debug, cli.OggFiles)
-	go musicBotHandler.Run(ctx, &pkgwsrunner.WebSocketRunner{
+	trackDCHandler, err := pkghandlers.NewTrackDCHandler(cli.OggFiles, cli.Debug)
+	if err != nil {
+		log.Fatalf("Failed to create track data channel handler: %v", err)
+	}
+	musicBotHandler = pkghandlers.NewSignallingHandler(pkghandlers.WithPingHandler(trackDCHandler), cli.ICEServer, cli.Debug, api)
+	musicBotRunner := &pkgwsrunner.WebSocketRunner{
 		URL:                   *u,
 		PingIntv:              cli.PingPeriod,
 		Debug:                 cli.Debug,
 		ReconnectOnDisconnect: cli.ReconnectOnDisconnect,
 		ReconnectDelay:        cli.ReconnectDelay,
 		NodeName:              "MusicBot",
-	})
+	}
+	go musicBotRunner.Run(ctx, musicBotHandler)
 	log.Println("Music bot started!")
+
+	var counterBotHandler pkghandlers.GenericWebRTCHandler
+	counterBotHandler = pkghandlers.NewSignallingHandler(pkghandlers.WithPingHandler(pkghandlers.NewCounterDCHandler()), cli.ICEServer, cli.Debug, nil)
+	counterBotRunner := &pkgwsrunner.WebSocketRunner{
+		URL:                   *u,
+		PingIntv:              cli.PingPeriod,
+		Debug:                 cli.Debug,
+		ReconnectOnDisconnect: cli.ReconnectOnDisconnect,
+		ReconnectDelay:        cli.ReconnectDelay,
+		NodeName:              "CounterBot",
+	}
+	counterBotRunner.Run(ctx, counterBotHandler)
+	log.Println("Counter bot started!")
 
 	sigsCh := make(chan os.Signal, 1)
 	signal.Notify(sigsCh, syscall.SIGINT)

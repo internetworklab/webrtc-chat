@@ -2,11 +2,13 @@ package handlers
 
 import (
 	"context"
-	pkgwsrunner "webrtc-agents/pkg/ws_runner"
+
+	pkgframing "example.com/webrtcserver/pkg/framing"
+	"github.com/pion/webrtc/v4"
 )
 
 type GenericWebRTCHandler interface {
-	Run(ctx context.Context, runner pkgwsrunner.WebSocketSignallingSessionRunner)
+	Serve(ctx context.Context, signallingTx chan<- pkgframing.MessagePayload, signallingRx <-chan pkgframing.MessagePayload)
 }
 
 // Predefined data channel labels
@@ -97,3 +99,15 @@ type ChatMessage struct {
 	Message  *string            `json:"message,omitempty"`
 	RichText *ChatMessageText   `json:"richText,omitempty"`
 }
+
+type DCHandler interface {
+	Serve(ctx context.Context, dc *webrtc.DataChannel, signallingTx chan<- pkgframing.MessagePayload)
+}
+
+type DCHandlerCtxKey string
+
+const (
+	DCHandlerCtxRemoteNodeID  DCHandlerCtxKey = "remoteNodeID"
+	DCHandlerCtxOurNodeID     DCHandlerCtxKey = "ourNodeID"
+	DCHandlerCtxPeerConnStore DCHandlerCtxKey = "peerConnStore"
+)
