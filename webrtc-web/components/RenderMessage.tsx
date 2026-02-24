@@ -26,11 +26,12 @@ import {
   DialogContent,
   IconButton,
   Slider,
+  useColorScheme,
+  useMediaQuery,
 } from "@mui/material";
 import { Fragment } from "react/jsx-runtime";
 import { RenderAvatar } from "./RenderAvatar";
 import { RefObject, useEffect, useRef, useState } from "react";
-import { SP } from "next/dist/shared/lib/utils";
 
 function getFileLoadedRatio(
   file: ChatMessageFile,
@@ -331,6 +332,32 @@ function stopSong(
 
 const defaultVolume = 0.5;
 
+function FFTVisualization(props: { fftSize: number; updateIntvMs: number }) {
+  const { fftSize, updateIntvMs } = props;
+  // bins are a series of measures of frequency strengths, in [0, 1], real numbers.
+  const [bins, setBins] = useState<number[]>([]);
+  const addSample = (sample: number) => {
+    setBins((prev) => {
+      if (fftSize <= 0) {
+        return prev;
+      }
+      let newBins = [...prev, sample];
+      if (newBins.length > fftSize) {
+        newBins = newBins.slice(1);
+      }
+      return newBins;
+    });
+  };
+
+  useEffect(() => {
+    const it = setInterval(() => {
+      addSample(Math.random());
+    }, updateIntvMs);
+  }, [updateIntvMs]);
+
+  return <Box sx={{ height: "100%" }}></Box>;
+}
+
 function RenderSongTrack(props: {
   audioContextRef: RefObject<AudioContext | null>;
   songTrackMsgPayload: ChatMessageSongTrack;
@@ -346,142 +373,164 @@ function RenderSongTrack(props: {
 
   const gainNodeRef = useRef<GainNode | null>(null);
   const sourceNodeRef = useRef<AudioNode | null>(null);
+  const fftSize = 2048;
 
   return (
-    <Box
-      sx={{
-        display: "flex",
-        alignItems: "center",
-        padding: 2,
-        minWidth: 280,
-        maxWidth: 400,
-      }}
-    >
-      {/* Album art / Thumbnail - only show if thumbnail exists */}
-      {hasThumbnail && (
+    <Fragment>
+      {isPlaying && (
         <Box
           sx={{
-            width: 56,
-            height: 56,
-            borderRadius: 1,
-            overflow: "hidden",
-            marginRight: 2,
-            flexShrink: 0,
+            position: "absolute",
+            left: 0,
+            top: 0,
+            height: "100%",
+            width: "100%",
           }}
         >
-          <img
-            src={songTrackMsgPayload.thumbnail!.dataURL}
-            alt={songTrackMsgPayload.label || "Album art"}
-            style={{ width: "100%", height: "100%", objectFit: "cover" }}
-          />
+          <FFTVisualization fftSize={fftSize} updateIntvMs={20} />
         </Box>
       )}
-
-      {/* Track info and controls */}
-      <Box sx={{ flex: 1, minWidth: 0 }}>
-        {/* Track name */}
-        <Typography noWrap sx={{ fontWeight: 500, marginBottom: 1 }}>
-          {songTrackMsgPayload.label || "Unknown Track"}
-        </Typography>
-
-        {/* Progress bar / waveform visualization - only show when playing */}
-        {isPlaying && songTrackMsgPayload?.progress !== undefined && (
-          <Box sx={{ paddingTop: 1, paddingBottom: 2 }}>
-            <Box
-              sx={{
-                height: 4,
-                backgroundColor: "divider",
-                borderRadius: 2,
-                position: "relative",
-                overflow: "hidden",
-              }}
-            >
-              <Box
-                sx={{
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                  height: "100%",
-                  width: "60%",
-                  backgroundColor: "primary.main",
-                  borderRadius: 2,
-                  transition: "width 0.3s ease",
-                }}
-              />
-            </Box>
+      <Box
+        sx={{
+          opacity: isPlaying ? 0 : 1,
+          transitionProperty: "opacity",
+          transitionDuration: "500ms",
+          display: "flex",
+          alignItems: "center",
+          padding: 2,
+          minWidth: 280,
+          maxWidth: 400,
+          "&:hover": {
+            opacity: 1,
+          },
+        }}
+      >
+        {/* Album art / Thumbnail - only show if thumbnail exists */}
+        {hasThumbnail && (
+          <Box
+            sx={{
+              width: 56,
+              height: 56,
+              borderRadius: 1,
+              overflow: "hidden",
+              marginRight: 2,
+              flexShrink: 0,
+            }}
+          >
+            <img
+              src={songTrackMsgPayload.thumbnail!.dataURL}
+              alt={songTrackMsgPayload.label || "Album art"}
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+            />
           </Box>
         )}
 
-        {/* Controls row */}
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          {/* Play/Pause button */}
-          <IconButton
-            size="small"
-            disabled={!track || track.muted}
-            sx={{
-              backgroundColor: "primary.main",
-              color: "white",
-              "&:hover": {
-                backgroundColor: "primary.dark",
-              },
-              "&.Mui-disabled": {
-                backgroundColor: "primary.light",
-                color: "white",
-                opacity: 0.5,
-              },
-            }}
-            onClick={() => {
-              if (isPlaying) {
-                stopSong(sourceNodeRef, gainNodeRef);
-                setIsPlaying(false);
-              } else {
-                const audioContext = audioContextRef.current;
-                if (audioContext && track) {
-                  playSong(
-                    track,
-                    audioContext,
-                    sourceNodeRef,
-                    gainNodeRef,
-                    volume,
-                  );
-                }
-                setIsPlaying(true);
-              }
-            }}
-          >
-            {isPlaying ? (
-              <Pause fontSize="small" />
-            ) : (
-              <PlayArrow fontSize="small" />
-            )}
-          </IconButton>
-
-          {/* Volume control */}
-          <VolumeUp sx={{ fontSize: 18, color: "text.secondary" }} />
-          <Slider
-            size="small"
-            value={volume * 100}
-            disabled={!track}
-            sx={{
-              flex: 1,
-              marginLeft: 0.5,
-              "& .MuiSlider-thumb": {
-                width: 12,
-                height: 12,
-              },
-            }}
-          />
-
-          {/* Volume percentage */}
-          <Typography
-            variant="caption"
-            sx={{ color: "text.secondary", minWidth: 35 }}
-          >
-            {Math.round(volume * 100)}%
+        {/* Track info and controls */}
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          {/* Track name */}
+          <Typography noWrap sx={{ fontWeight: 500, marginBottom: 1 }}>
+            {songTrackMsgPayload.label || "Unknown Track"}
           </Typography>
+
+          {/* Progress bar / waveform visualization - only show when playing */}
+          {isPlaying && songTrackMsgPayload?.progress !== undefined && (
+            <Box sx={{ paddingTop: 1, paddingBottom: 2 }}>
+              <Box
+                sx={{
+                  height: 4,
+                  backgroundColor: "divider",
+                  borderRadius: 2,
+                  position: "relative",
+                  overflow: "hidden",
+                }}
+              >
+                <Box
+                  sx={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    height: "100%",
+                    width: "60%",
+                    backgroundColor: "primary.main",
+                    borderRadius: 2,
+                    transition: "width 0.3s ease",
+                  }}
+                />
+              </Box>
+            </Box>
+          )}
+
+          {/* Controls row */}
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            {/* Play/Pause button */}
+            <IconButton
+              size="small"
+              disabled={!track || track.muted}
+              sx={{
+                backgroundColor: "primary.main",
+                color: "white",
+                "&:hover": {
+                  backgroundColor: "primary.dark",
+                },
+                "&.Mui-disabled": {
+                  backgroundColor: "primary.light",
+                  color: "white",
+                  opacity: 0.5,
+                },
+              }}
+              onClick={() => {
+                if (isPlaying) {
+                  stopSong(sourceNodeRef, gainNodeRef);
+                  setIsPlaying(false);
+                } else {
+                  const audioContext = audioContextRef.current;
+                  if (audioContext && track) {
+                    playSong(
+                      track,
+                      audioContext,
+                      sourceNodeRef,
+                      gainNodeRef,
+                      volume,
+                    );
+                  }
+                  setIsPlaying(true);
+                }
+              }}
+            >
+              {isPlaying ? (
+                <Pause fontSize="small" />
+              ) : (
+                <PlayArrow fontSize="small" />
+              )}
+            </IconButton>
+
+            {/* Volume control */}
+            <VolumeUp sx={{ fontSize: 18, color: "text.secondary" }} />
+            <Slider
+              size="small"
+              value={volume * 100}
+              disabled={!track}
+              sx={{
+                flex: 1,
+                marginLeft: 0.5,
+                "& .MuiSlider-thumb": {
+                  width: 12,
+                  height: 12,
+                },
+              }}
+            />
+
+            {/* Volume percentage */}
+            <Typography
+              variant="caption"
+              sx={{ color: "text.secondary", minWidth: 35 }}
+            >
+              {Math.round(volume * 100)}%
+            </Typography>
+          </Box>
         </Box>
       </Box>
-    </Box>
+    </Fragment>
   );
 }
 
@@ -505,6 +554,9 @@ export function RenderMessage(props: {
   const peername = userPreferenceMap[message.fromNodeId]?.name ?? "";
   const peercoloridxprefer =
     userPreferenceMap[message.fromNodeId]?.indexOfPreferColor ?? -1;
+
+  const preferDark = useMediaQuery("(prefers-color-scheme: dark)");
+  const { mode } = useColorScheme();
 
   return (
     <Box
@@ -545,6 +597,15 @@ export function RenderMessage(props: {
             flex: 1,
             position: "relative",
           }}
+          elevation={
+            mode === "dark"
+              ? 1
+              : mode === "light"
+                ? 0
+                : mode === "system" && preferDark
+                  ? 1
+                  : 0
+          }
         >
           {message.file && (
             <RenderGenericAttachment
