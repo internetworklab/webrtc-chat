@@ -17,7 +17,7 @@ type TrackHandle struct {
 	// trackId serves as the label for the track when appearing as the ontrack event on webrtc
 	trackId               string
 	streamId              string
-	stopChan              chan struct{}
+	stopChan              map[string]chan interface{}
 	sampleRate            int
 	numChannels           int
 	samplesPerPacket      int
@@ -46,7 +46,7 @@ func NewTrackHandle(streamId string, trackId string, frameIntv time.Duration, sa
 	wh := &TrackHandle{
 		trackId:               trackId,
 		streamId:              streamId,
-		stopChan:              make(chan struct{}),
+		stopChan:              make(map[string]chan interface{}),
 		sampleRate:            sampleRate,
 		numChannels:           numChannels,
 		numPrePopulatePackets: 10,
@@ -88,7 +88,7 @@ func (track *TrackHandle) encodeAndSend(
 	return sequenceNumber, timestamp, nil
 }
 
-func (track *TrackHandle) startStreaming(ctx webrtc.TrackLocalContext, selectedCodec webrtc.RTPCodecParameters) {
+func (track *TrackHandle) startStreaming(ctx webrtc.TrackLocalContext, selectedCodec webrtc.RTPCodecParameters, stopChan <-chan interface{}) {
 	// refer to [rfc7587](https://datatracker.ietf.org/doc/html/rfc7587)
 	// for the browser support of codecs, refer to https://developer.mozilla.org/en-US/docs/Web/Media/Guides/Formats/WebRTC_codecs
 
@@ -133,7 +133,7 @@ func (track *TrackHandle) startStreaming(ctx webrtc.TrackLocalContext, selectedC
 				return
 			}
 
-		case <-track.stopChan:
+		case <-stopChan:
 			ticker.Stop()
 			return
 		}
@@ -196,13 +196,19 @@ func (track *TrackHandle) WriteTo(duration time.Duration, ssrc uint32, payloadTy
 // This will be called internally after signaling is complete and the list of available
 // codecs has been determined
 func (track *TrackHandle) Bind(ctx webrtc.TrackLocalContext) (webrtc.RTPCodecParameters, error) {
-	log.Printf("[track] stream %s is started", track.streamId)
+	log.Printf("[track] track %s is binding, ctx id: %s", track.trackId, ctx.ID())
 	codecParam := getOpusCodecParams(ctx)
 	if codecParam == nil {
 		return webrtc.RTPCodecParameters{}, errors.New("no supported codec found, currently only opus is supported")
 	}
-
-	go track.startStreaming(ctx, *codecParam)
+	if track.stopChan == nil {
+		track.stopChan = make(map[string]chan interface{})
+	}
+	if c := track.stopChan[ctx.ID()]; c != nil {
+		return webrtc.RTPCodecParameters{}, fmt.Errorf("track %s already bound, ctx id: %s", track.trackId, ctx.ID())
+	}
+	track.stopChan[ctx.ID()] = make(chan interface{})
+	go track.startStreaming(ctx, *codecParam, track.stopChan[ctx.ID()])
 
 	return *codecParam, nil
 }
@@ -210,8 +216,14 @@ func (track *TrackHandle) Bind(ctx webrtc.TrackLocalContext) (webrtc.RTPCodecPar
 // Unbind should implement the teardown logic when the track is no longer needed. This happens
 // because a track has been stopped.
 func (track *TrackHandle) Unbind(ctx webrtc.TrackLocalContext) error {
-	log.Printf("[track] stream %s is tearing down", track.streamId)
-	close(track.stopChan)
+	log.Printf("[track] stream %s is tearing down, ctx id: %s", track.streamId, ctx.ID())
+	if track.stopChan != nil {
+		if c := track.stopChan[ctx.ID()]; c != nil {
+			close(c)
+			delete(track.stopChan, ctx.ID())
+		}
+	}
+
 	return nil
 }
 
