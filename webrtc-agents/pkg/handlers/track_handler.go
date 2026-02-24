@@ -754,6 +754,18 @@ func (h *TrackHandler) createAndAddTrack(entry *PeerConnEntry, remoteNodeID stri
 	streamId := "stream-" + uuid.NewString()
 	trackId := "track-" + uuid.NewString()
 
+	// Check if user already has an unclosed track and remove it
+	entry.mu.Lock()
+	if entry.CurrentTrackSender != nil {
+		log.Printf("[webrtc] Removing existing track for peer %s before adding new track", remoteNodeID)
+		entry.CurrentTrackSender.Stop()
+		if err := entry.PeerConnection.RemoveTrack(entry.CurrentTrackSender); err != nil {
+			log.Printf("[webrtc] Warning: failed to remove existing track for peer %s: %v", remoteNodeID, err)
+		}
+		entry.CurrentTrackSender = nil
+	}
+	entry.mu.Unlock()
+
 	// Create a new audio track
 	track, err := pkgtracks.NewTrackHandle(
 		streamId,
@@ -771,6 +783,11 @@ func (h *TrackHandler) createAndAddTrack(entry *PeerConnEntry, remoteNodeID stri
 	if err != nil {
 		return fmt.Errorf("failed to add track to peer connection: %w", err)
 	}
+
+	// Store the sender for this user
+	entry.mu.Lock()
+	entry.CurrentTrackSender = sender
+	entry.mu.Unlock()
 
 	log.Printf("[webrtc] Created and added track %s for peer %s", track.ID(), remoteNodeID)
 
@@ -804,9 +821,6 @@ func (h *TrackHandler) createAndAddTrack(entry *PeerConnEntry, remoteNodeID stri
 	signallingTx <- offerMsg
 
 	log.Printf("[webrtc] Sent offer with new track to peer %s", remoteNodeID)
-
-	// Remove the sender if we need to stop the track later
-	_ = sender
 
 	return nil
 }

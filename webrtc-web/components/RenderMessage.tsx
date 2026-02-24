@@ -459,6 +459,21 @@ function RenderSongTrack(props: {
   const fftSize = 128;
   const updateIntvMs = Math.round(1000 / 30);
 
+  const [ended, setEnded] = useState(false);
+  useEffect(() => {
+    if (!track) {
+      return;
+    }
+
+    const onended = () => {
+      setEnded(true);
+    };
+    track.addEventListener("ended", onended);
+    return () => {
+      track.removeEventListener("ended", onended);
+    };
+  }, [track]);
+
   return (
     <Fragment>
       {isPlaying && (
@@ -548,82 +563,96 @@ function RenderSongTrack(props: {
           )}
 
           {/* Controls row */}
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-            {/* Play/Pause button */}
-            <IconButton
-              size="small"
-              disabled={!track || track.muted}
-              sx={{
-                backgroundColor: "primary.main",
-                color: "white",
-                "&:hover": {
-                  backgroundColor: "primary.dark",
-                },
-                "&.Mui-disabled": {
-                  backgroundColor: "primary.light",
-                  color: "white",
-                  opacity: 0.5,
-                },
-              }}
-              onClick={() => {
-                if (isPlaying) {
-                  stopSong(sourceNodeRef, gainNodeRef, analyzerNodeRef);
-                  setIsPlaying(false);
-                } else {
-                  const audioContext = audioContextRef.current;
-                  if (audioContext && track) {
-                    playSong(
-                      track,
-                      audioContext,
-                      sourceNodeRef,
-                      gainNodeRef,
-                      analyzerNodeRef,
-                      fftSize,
-                      volume,
-                    );
-                  }
-                  setIsPlaying(true);
-                }
-              }}
-            >
-              {isPlaying ? (
-                <Pause fontSize="small" />
-              ) : (
-                <PlayArrow fontSize="small" />
-              )}
-            </IconButton>
-
-            {/* Volume control */}
-            <VolumeUp sx={{ fontSize: 18, color: "text.secondary" }} />
-            <Slider
-              size="small"
-              value={volume * 100}
-              onChange={(_, vRaw) => {
-                const v = vRaw / 100;
-                setVolume(v);
-                if (gainNodeRef.current) {
-                  gainNodeRef.current.gain.value = v;
-                }
-              }}
-              disabled={!track}
-              sx={{
-                flex: 1,
-                marginLeft: 0.5,
-                "& .MuiSlider-thumb": {
-                  width: 12,
-                  height: 12,
-                },
-              }}
-            />
-
-            {/* Volume percentage */}
-            <Typography
-              variant="caption"
-              sx={{ color: "text.secondary", minWidth: 35 }}
-            >
-              {Math.round(volume * 100)}%
+          {!track || track.readyState === "ended" || ended ? (
+            <Typography variant="caption">
+              The track is ended or not ready to play yet.
             </Typography>
-          </Box>
+          ) : (
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              {/* Play/Pause button */}
+              <IconButton
+                size="small"
+                disabled={!track || track.muted}
+                sx={{
+                  backgroundColor: "primary.main",
+                  color: "white",
+                  "&:hover": {
+                    backgroundColor: "primary.dark",
+                  },
+                  "&.Mui-disabled": {
+                    backgroundColor: "primary.light",
+                    color: "white",
+                    opacity: 0.5,
+                  },
+                }}
+                onClick={() => {
+                  if (isPlaying) {
+                    stopSong(sourceNodeRef, gainNodeRef, analyzerNodeRef);
+                    setIsPlaying(false);
+                    // try {
+                    //   if (track) {
+                    //     track.stop();
+                    //   }
+                    //   console.log(`[dbg] [track] track is stopped:`, track);
+                    // } catch (e) {
+                    //   console.error(`failed to stop to track:`, e, track);
+                    // }
+                  } else {
+                    const audioContext = audioContextRef.current;
+                    if (audioContext && track) {
+                      playSong(
+                        track,
+                        audioContext,
+                        sourceNodeRef,
+                        gainNodeRef,
+                        analyzerNodeRef,
+                        fftSize,
+                        volume,
+                      );
+                    }
+                    setIsPlaying(true);
+                  }
+                }}
+              >
+                {isPlaying ? (
+                  <Pause fontSize="small" />
+                ) : (
+                  <PlayArrow fontSize="small" />
+                )}
+              </IconButton>
+
+              {/* Volume control */}
+              <VolumeUp sx={{ fontSize: 18, color: "text.secondary" }} />
+              <Slider
+                size="small"
+                value={volume * 100}
+                onChange={(_, vRaw) => {
+                  const v = vRaw / 100;
+                  setVolume(v);
+                  if (gainNodeRef.current) {
+                    gainNodeRef.current.gain.value = v;
+                  }
+                }}
+                disabled={!track}
+                sx={{
+                  flex: 1,
+                  marginLeft: 0.5,
+                  "& .MuiSlider-thumb": {
+                    width: 12,
+                    height: 12,
+                  },
+                }}
+              />
+
+              {/* Volume percentage */}
+              <Typography
+                variant="caption"
+                sx={{ color: "text.secondary", minWidth: 35 }}
+              >
+                {Math.round(volume * 100)}%
+              </Typography>
+            </Box>
+          )}
         </Box>
       </Box>
     </Fragment>

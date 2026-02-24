@@ -17,6 +17,7 @@ type PeerConnEntry struct {
 	QueuedICEOffers       []webrtc.ICECandidateInit
 	ICERestartAttempts    int
 	MaxICERestartAttempts int
+	CurrentTrackSender    *webrtc.RTPSender // Track the current active track sender for this peer
 	mu                    sync.RWMutex
 }
 

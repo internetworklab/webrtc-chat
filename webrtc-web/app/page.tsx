@@ -915,6 +915,14 @@ function attachPeerConnectionEventListeners(
       return;
     }
 
+    event.track.onended = (ev) => {
+      console.log(
+        `[dbg]${logSource} Audio track ended from peer ${remoteNodeId}:`,
+        event.track,
+        ev,
+      );
+    };
+
     setConnTrackStatus((prev) => {
       return {
         ...prev,
