@@ -16,19 +16,14 @@ import (
 
 type ClockBotDCHandler struct {
 	APIKey string
-	
+
 	generalProperties sync.Map
-	
-	mu     sync.Mutex
-	// Track active clock updaters by remoteNodeID
-	clockUpdaters map[string]context.CancelFunc
 }
 
 // NewClockBotDCHandler creates a new ClockBotDCHandler
 func NewClockBotDCHandler(apiKey string) *ClockBotDCHandler {
 	return &ClockBotDCHandler{
-		APIKey:        apiKey,
-		clockUpdaters: make(map[string]context.CancelFunc),
+		APIKey: apiKey,
 	}
 }
 
@@ -40,8 +35,6 @@ func (h *ClockBotDCHandler) Serve(ctx context.Context, dc *webrtc.DataChannel, s
 	switch dc.Label() {
 	case PredefinedDCLabelChat:
 		h.setupChatDataChannel(ctx, dc, remoteNodeID, signallingTx)
-	case PredefinedDCLabelMsgStream:
-		h.setupMsgStreamDataChannel(ctx, dc, remoteNodeID)
 	default:
 		log.Printf("[webrtc] Unknown (or unsupported) data channel label: %s", dc.Label())
 	}
@@ -131,10 +124,8 @@ func (h *ClockBotDCHandler) startClock(ctx context.Context, chatDC *webrtc.DataC
 	// Create a cancellable context for the clock updater
 	msgStreamCtx, cancel := context.WithCancel(ctx)
 
-	// Store the cancel function
-	h.mu.Lock()
-	h.clockUpdaters[remoteNodeID] = cancel
-	h.mu.Unlock()
+	// Store the cancel function in generalProperties
+	h.generalProperties.Store(remoteNodeID+"_cancel_func", cancel)
 
 	// Generate a message ID for the clock message that we'll update
 	messageID := uuid.New().String()
@@ -204,7 +195,7 @@ func (h *ClockBotDCHandler) sendClockUpdates(ctx context.Context, dc *webrtc.Dat
 			patch := MessagePatchOrder{
 				MessageID: messageID,
 				Kind:      MessagePatchOrderKindReplace,
-				Value:     fmt.Sprintf("🕐 Current Time: %s", time.Now().Format("15:04:05")),
+				Value:     fmt.Sprintf("🕐 Current Time: %s", time.Now().Format(time.RFC3339)),
 			}
 
 			// Marshal the patch to binary
@@ -227,13 +218,13 @@ func (h *ClockBotDCHandler) sendClockUpdates(ctx context.Context, dc *webrtc.Dat
 
 // stopClockUpdater stops the clock updater for a given remote node ID
 func (h *ClockBotDCHandler) stopClockUpdater(remoteNodeID string) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	if cancel, exists := h.clockUpdaters[remoteNodeID]; exists {
-		cancel()
-		delete(h.clockUpdaters, remoteNodeID)
-		log.Printf("[webrtc] Stopped clock updater for peer %s", remoteNodeID)
+	key := remoteNodeID + "_cancel_func"
+	if value, exists := h.generalProperties.Load(key); exists {
+		if cancel, ok := value.(context.CancelFunc); ok {
+			cancel()
+			h.generalProperties.Delete(key)
+			log.Printf("[webrtc] Stopped clock updater for peer %s", remoteNodeID)
+		}
 	}
 }
 

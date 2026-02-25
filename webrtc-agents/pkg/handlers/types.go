@@ -112,3 +112,10 @@ const (
 	DCHandlerCtxOurNodeID     DCHandlerCtxKey = "ourNodeID"
 	DCHandlerCtxPeerConnStore DCHandlerCtxKey = "peerConnStore"
 )
+
+type GeneralPropertyKey string
+
+const (
+	GP_Key_NodeId     = "node_id"
+	GP_Key_CancelFunc = "cancel_func"
+)
