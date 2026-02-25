@@ -136,15 +136,8 @@ Your counter is personal and independent from other users!`
 func (h *CounterDCHandler) increaseCounter(remoteNodeID string) int {
 	for {
 		// Load the current value
-		val, ok := h.counters.Load(remoteNodeID)
-		currentValue := 0
-		if ok {
-			if intVal, isValid := val.(int); isValid {
-				currentValue = intVal
-			}
-		}
-
-		newValue := currentValue + 1
+		val, _ := h.counters.LoadOrStore(remoteNodeID, 0)
+		newValue := val.(int) + 1
 
 		// Try to atomically swap the old value with the new value
 		// If the key doesn't exist yet, val will be nil, which is correct for CompareAndSwap

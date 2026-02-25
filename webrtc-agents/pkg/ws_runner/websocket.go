@@ -124,8 +124,8 @@ func (pinger *BasicWSMsgHandler) startMessagesLoop(ctx context.Context, wsConn *
 					return
 				}
 
-				if msg.Echo != nil && msg.Echo.Direction == pkgconnreg.EchoDirectionS2C {
-					if pinger.Debug {
+				if msg.Echo != nil {
+					if msg.Echo.Direction == pkgconnreg.EchoDirectionS2C && pinger.Debug {
 						rtt := time.Since(time.UnixMilli(int64(msg.Echo.Timestamp)))
 						log.Printf("Pong received - RTT: %v, CorrelationID: %s, SeqID: %d",
 							rtt, msg.Echo.CorrelationID, msg.Echo.SeqID)

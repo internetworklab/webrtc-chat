@@ -34,7 +34,6 @@ func (_ *EchoDCHandler) Serve(ctx context.Context, dc *webrtc.DataChannel, signa
 		// - ping: ping/pong messages
 		// - file: file transfer metadata
 		if chatMsg.ACK != nil || chatMsg.Delete != nil || chatMsg.Amend != nil || chatMsg.Ping != nil || chatMsg.File != nil {
-			log.Printf("[webrtc] Ignored un-echoable message from peer %s: %+v", remoteNodeID, string(msg.Data))
 			return
 		}
 
