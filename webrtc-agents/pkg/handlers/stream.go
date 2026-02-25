@@ -29,9 +29,9 @@ func (msgPatchOrder *MessagePatchOrder) Marshal() ([]byte, error) {
 	// Calculate total size needed
 	// 1 byte for Kind
 	// 2 bytes for MessageID length
-	// len(MessageID) bytes for MessageID
+	// len(MessageID) bytes for MessageID (len returns byte length, not rune count)
 	// 2 bytes for Value length
-	// len(Value) bytes for Value
+	// len(Value) bytes for Value (len returns byte length, not rune count)
 	totalSize := 1 + 2 + len(msgPatchOrder.MessageID) + 2 + len(msgPatchOrder.Value)
 
 	buf := make([]byte, totalSize)
@@ -42,6 +42,7 @@ func (msgPatchOrder *MessagePatchOrder) Marshal() ([]byte, error) {
 	offset++
 
 	// Write MessageID Length (2 bytes, big endian)
+	// Note: len() returns byte length, not number of characters
 	binary.BigEndian.PutUint16(buf[offset:], uint16(len(msgPatchOrder.MessageID)))
 	offset += 2
 
@@ -50,6 +51,7 @@ func (msgPatchOrder *MessagePatchOrder) Marshal() ([]byte, error) {
 	offset += len(msgPatchOrder.MessageID)
 
 	// Write Value Length (2 bytes, big endian)
+	// Note: len() returns byte length, not number of characters
 	binary.BigEndian.PutUint16(buf[offset:], uint16(len(msgPatchOrder.Value)))
 	offset += 2
 
