@@ -131,7 +131,7 @@ func (h *ClockBotDCHandler) startClock(ctx context.Context, chatDC *webrtc.DataC
 	messageID := uuid.New().String()
 
 	// Send initial clock message via chat
-	initialTime := fmt.Sprintf("🕐 Current Time: %s", time.Now().Format("15:04:05"))
+	initialTime := fmt.Sprintf("🕐 Current Time: %s", time.Now().Format(time.RFC3339))
 	h.sendChatResponseWithID(chatDC, originalMsg, initialTime, messageID)
 
 	// Get peer connection from context
@@ -210,8 +210,6 @@ func (h *ClockBotDCHandler) sendClockUpdates(ctx context.Context, dc *webrtc.Dat
 				log.Printf("[webrtc] Failed to send clock update: %v", err)
 				return
 			}
-
-			log.Printf("[webrtc] Sent clock update for message %s", messageID)
 		}
 	}
 }

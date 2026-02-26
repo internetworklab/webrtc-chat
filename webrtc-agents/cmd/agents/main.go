@@ -64,6 +64,7 @@ func main() {
 	}
 	go echoBotRunner.Run(ctx, echoBotHandler)
 	log.Println("Echo bot started!")
+	<-time.After(1 * time.Second)
 
 	// MediaEngine Configuration:
 	// The handler creates a MediaEngine that registers only the Opus codec with the following parameters:
@@ -120,6 +121,7 @@ func main() {
 	}
 	go musicBotRunner.Run(ctx, musicBotHandler)
 	log.Println("Music bot started!")
+	<-time.After(1 * time.Second)
 
 	var counterBotHandler pkghandlers.GenericWebRTCHandler
 	counterBotHandler = pkghandlers.NewSignallingHandler(pkghandlers.WithPingHandler(pkghandlers.NewCounterDCHandler()), cli.ICEServer, cli.Debug, nil)
@@ -131,8 +133,23 @@ func main() {
 		ReconnectDelay:        cli.ReconnectDelay,
 		NodeName:              "CounterBot",
 	}
-	counterBotRunner.Run(ctx, counterBotHandler)
+	go counterBotRunner.Run(ctx, counterBotHandler)
 	log.Println("Counter bot started!")
+	<-time.After(1 * time.Second)
+
+	var clockBotHandler pkghandlers.GenericWebRTCHandler
+	clockBotHandler = pkghandlers.NewSignallingHandler(pkghandlers.WithPingHandler(pkghandlers.NewClockBotDCHandler(openrouterAPIKey)), cli.ICEServer, cli.Debug, nil)
+	clockBotRunner := &pkgwsrunner.WebSocketRunner{
+		URL:                   *u,
+		PingIntv:              cli.PingPeriod,
+		Debug:                 cli.Debug,
+		ReconnectOnDisconnect: cli.ReconnectOnDisconnect,
+		ReconnectDelay:        cli.ReconnectDelay,
+		NodeName:              "ClockBot",
+	}
+	go clockBotRunner.Run(ctx, clockBotHandler)
+	log.Println("Clock bot started!")
+	<-time.After(1 * time.Second)
 
 	sigsCh := make(chan os.Signal, 1)
 	signal.Notify(sigsCh, syscall.SIGINT)
