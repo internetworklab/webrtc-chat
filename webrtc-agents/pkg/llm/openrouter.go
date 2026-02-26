@@ -30,9 +30,7 @@ type OpenRouterCompletionProxy struct {
 
 func (p *OpenRouterCompletionProxy) getHttpClient() *http.Client {
 	if p.HttpClient == nil {
-		return &http.Client{
-			Timeout: openRouterTimeout,
-		}
+		return http.DefaultClient
 	}
 	return p.HttpClient
 }
