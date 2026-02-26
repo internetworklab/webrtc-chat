@@ -5,6 +5,46 @@ import (
 	"testing"
 )
 
+// Index by sender id
+type IndexedMsgsCollection struct {
+	store map[string][]interface{}
+}
+
+func NewIndexedMsgsCollection() *IndexedMsgsCollection {
+	return &IndexedMsgsCollection{
+		store: make(map[string][]interface{}),
+	}
+}
+
+type IdentifiableMessage interface {
+	GetSenderId() string
+}
+
+func (indexColl *IndexedMsgsCollection) DeepClone() MsgsCollection {
+	newMap := make(map[string][]interface{})
+	for senderId, li := range indexColl.store {
+		newList := make([]interface{}, len(li))
+		copy(newList, li)
+		newMap[senderId] = newList
+	}
+	newIndexColl := new(IndexedMsgsCollection)
+	newIndexColl.store = newMap
+	return newIndexColl
+}
+
+func (indexColl *IndexedMsgsCollection) Append(msg interface{}) {
+	senderId := ""
+	if sender, ok := msg.(IdentifiableMessage); ok {
+		senderId = sender.GetSenderId()
+	}
+	indexColl.store[senderId] = append(indexColl.store[senderId], msg)
+}
+
+// GetMessagesBySenderId returns messages for a specific sender
+func (indexColl *IndexedMsgsCollection) GetMessagesBySenderId(senderId string) []interface{} {
+	return indexColl.store[senderId]
+}
+
 // MockMessage is a mock message for testing
 type MockMessage struct {
 	Sender string
