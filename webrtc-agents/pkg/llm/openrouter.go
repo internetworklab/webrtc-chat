@@ -19,8 +19,16 @@ type OpenRouterChoice struct {
 	Message            *OpenRouterMessage `json:"message,omitempty"`
 }
 
+type LLMRole string
+
+const (
+	LLMRoleUser      LLMRole = "user"
+	LLMRoleAssistant LLMRole = "assistant"
+	LLMRoleSystem    LLMRole = "system"
+)
+
 type OpenRouterMessage struct {
-	Role             string                      `json:"role"`
+	Role             LLMRole                     `json:"role"`
 	Content          string                      `json:"content"`
 	Refusal          *string                     `json:"refusal,omitempty"`
 	Reasoning        string                      `json:"reasoning"`
@@ -62,8 +70,8 @@ type OpenRouterCompletionTokensDetails struct {
 }
 
 type OpenRouterCompletionRequestMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role    LLMRole `json:"role"`
+	Content string  `json:"content"`
 }
 
 type OpenRouterCompletionRequestReasoning struct {

@@ -203,7 +203,7 @@ func (h *ChatBotDCHandler) generateLLMResponse(ctx context.Context, remoteNodeID
 		Model: "openai/gpt-3.5-turbo",
 		Messages: []pkgllm.OpenRouterCompletionRequestMessage{
 			{
-				Role:    "system",
+				Role:    pkgllm.LLMRoleSystem,
 				Content: "You are a helpful assistant. Respond concisely and helpfully to user messages.",
 			},
 		},
@@ -262,9 +262,9 @@ func (h *ChatBotDCHandler) getConversationHistory(sessionID string, ourNodeID st
 	// Convert to LLM message format
 	var llmMessages []pkgllm.OpenRouterCompletionRequestMessage
 	for _, msg := range allMessages {
-		role := "user"
+		var role pkgllm.LLMRole = pkgllm.LLMRoleUser
 		if msg.senderID == ourNodeID {
-			role = "assistant"
+			role = pkgllm.LLMRoleAssistant
 		}
 		llmMessages = append(llmMessages, pkgllm.OpenRouterCompletionRequestMessage{
 			Role:    role,
