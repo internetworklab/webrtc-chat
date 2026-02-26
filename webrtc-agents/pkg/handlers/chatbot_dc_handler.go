@@ -5,40 +5,65 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	pkgframing "example.com/webrtcserver/pkg/framing"
+	"example.com/webrtcserver/pkg/msgs_store"
 
 	"github.com/google/uuid"
 	"github.com/pion/webrtc/v4"
 )
 
+// ChatHistoryMessage represents a message in the chat history
+type ChatHistoryMessage struct {
+	MessageID string
+	SenderID  string
+	Content   string
+	Timestamp int64
+}
+
+// GetSenderId implements msgs_store.IdentifiableMessage interface
+func (m *ChatHistoryMessage) GetSenderId() string {
+	return m.SenderID
+}
+
+// ChatBotDCHandler handles WebRTC data channel for chatbot functionality
 type ChatBotDCHandler struct {
 	APIKey string
+	store  *msgs_store.SyncMsgsStore
+}
+
+// NewChatBotDCHandler creates a new ChatBotDCHandler
+func NewChatBotDCHandler(apiKey string) *ChatBotDCHandler {
+	return &ChatBotDCHandler{
+		APIKey: apiKey,
+		store:  msgs_store.NewSyncMsgsStore(),
+	}
 }
 
 // Serve starts the WebRTC handler
 func (h *ChatBotDCHandler) Serve(ctx context.Context, dc *webrtc.DataChannel, signallingTx chan<- pkgframing.MessagePayload) {
-
 	remoteNodeID := ctx.Value(DCHandlerCtxRemoteNodeID).(string)
-	log.Printf("[webrtc] Received data channel: %s from peer %s", dc.Label(), remoteNodeID)
+	ourNodeID := ctx.Value(DCHandlerCtxOurNodeID).(string)
+	log.Printf("[webrtc] ChatBot received data channel: %s from peer %s", dc.Label(), remoteNodeID)
 
 	switch dc.Label() {
 	case PredefinedDCLabelChat:
-		h.setupChatDataChannel(dc, remoteNodeID)
+		h.setupChatDataChannel(dc, remoteNodeID, ourNodeID)
 	default:
 		log.Printf("[webrtc] Unknown (or unsupported) data channel label: %s", dc.Label())
 	}
 }
 
 // setupChatDataChannel sets up the chat data channel for handling messages
-func (h *ChatBotDCHandler) setupChatDataChannel(dc *webrtc.DataChannel, remoteNodeID string) {
+func (h *ChatBotDCHandler) setupChatDataChannel(dc *webrtc.DataChannel, remoteNodeID string, ourNodeID string) {
 	dc.OnOpen(func() {
-		log.Printf("[webrtc] Chat data channel opened with peer %s", remoteNodeID)
+		log.Printf("[webrtc] ChatBot data channel opened with peer %s", remoteNodeID)
 	})
 
 	dc.OnClose(func() {
-		log.Printf("[webrtc] Chat data channel closed with peer %s", remoteNodeID)
+		log.Printf("[webrtc] ChatBot data channel closed with peer %s", remoteNodeID)
 	})
 
 	dc.OnMessage(func(msg webrtc.DataChannelMessage) {
@@ -49,93 +74,147 @@ func (h *ChatBotDCHandler) setupChatDataChannel(dc *webrtc.DataChannel, remoteNo
 			return
 		}
 
+		// Skip ACK messages
 		if chatMsg.ACK != nil {
 			return
 		}
 
-		// Handle commands
-		if chatMsg.Message != nil {
-
-			msg := *chatMsg.Message
-
-			// Send ACK for the received message first
-			ackMsg := ChatMessage{
-				MessageID:  uuid.New().String(),
-				FromNodeID: chatMsg.ToNodeID,
-				ToNodeID:   chatMsg.FromNodeID,
-				Timestamp:  time.Now().UnixMilli(),
-				ACK: &ChatMessageACK{
-					MessageID: chatMsg.MessageID,
-				},
-			}
-			ackData, err := json.Marshal(ackMsg)
-			if err != nil {
-				log.Printf("[webrtc] Failed to marshal ACK message: %v", err)
-			} else if err := dc.SendText(string(ackData)); err != nil {
-				log.Printf("[webrtc] Failed to send ACK: %v", err)
-			}
-
-			// Handle /start command - show usage/help
-			if msg == "/start" {
-				log.Printf("[webrtc] Received /start command from peer %s", remoteNodeID)
-				h.sendChatResponse(dc, &chatMsg, h.formatHelp())
-				return
-			}
-
-			// Handle /increase command - increment the counter
-			if msg == "/increase" {
-				log.Printf("[webrtc] Received /increase command from peer %s", remoteNodeID)
-				newValue := h.increaseCounter(remoteNodeID)
-				h.sendChatResponse(dc, &chatMsg, fmt.Sprintf("Counter increased! Current value: %d", newValue))
-				return
-			}
-
-			// Handle /reset command - reset the counter
-			if msg == "/reset" {
-				log.Printf("[webrtc] Received /reset command from peer %s", remoteNodeID)
-				h.resetCounter(remoteNodeID)
-				h.sendChatResponse(dc, &chatMsg, "Counter reset! Current value: 0")
-				return
-			}
-
+		// Skip non-text messages
+		if chatMsg.Message == nil && chatMsg.RichText == nil {
+			return
 		}
 
+		// Get message content
+		var content string
+		if chatMsg.Message != nil {
+			content = *chatMsg.Message
+		} else if chatMsg.RichText != nil {
+			content = chatMsg.RichText.Content
+		}
+
+		// Send ACK for the received message
+		h.sendACK(dc, &chatMsg)
+
+		// Store the user's message
+		userMsg := &ChatHistoryMessage{
+			MessageID: chatMsg.MessageID,
+			SenderID:  remoteNodeID,
+			Content:   content,
+			Timestamp: chatMsg.Timestamp,
+		}
+		if err := h.store.Append(userMsg); err != nil {
+			log.Printf("[webrtc] Failed to store user message: %v", err)
+			return
+		}
+
+		// Format and send chat history as response
+		chatHistory := h.formatChatHistory(remoteNodeID, ourNodeID)
+		h.sendChatResponse(dc, &chatMsg, chatHistory, ourNodeID)
 	})
 
 	dc.OnError(func(err error) {
-		log.Printf("[webrtc] Chat data channel error with peer %s: %v", remoteNodeID, err)
+		log.Printf("[webrtc] ChatBot data channel error with peer %s: %v", remoteNodeID, err)
 	})
 }
 
-// formatHelp returns a formatted string with usage information
-func (h *ChatBotDCHandler) formatHelp() string {
-	return `🔢 Counter Bot - Available Commands:
-
-/start - Show this help message
-/increase - Increase your personal counter by 1
-/reset - Reset your personal counter to 0
-
-Your counter is personal and independent from other users!`
+// sendACK sends an acknowledgment for the received message
+func (h *ChatBotDCHandler) sendACK(dc *webrtc.DataChannel, originalMsg *ChatMessage) {
+	ackMsg := ChatMessage{
+		MessageID:  uuid.New().String(),
+		FromNodeID: originalMsg.ToNodeID,
+		ToNodeID:   originalMsg.FromNodeID,
+		Timestamp:  time.Now().UnixMilli(),
+		ACK: &ChatMessageACK{
+			MessageID: originalMsg.MessageID,
+		},
+	}
+	ackData, err := json.Marshal(ackMsg)
+	if err != nil {
+		log.Printf("[webrtc] Failed to marshal ACK message: %v", err)
+		return
+	}
+	if err := dc.SendText(string(ackData)); err != nil {
+		log.Printf("[webrtc] Failed to send ACK: %v", err)
+	}
 }
 
-// increaseCounter increments the counter for the given remote node ID and returns the new value
-func (h *ChatBotDCHandler) increaseCounter(remoteNodeID string) int {
-	return 0
+// formatChatHistory formats all messages in the store as a readable chat history
+func (h *ChatBotDCHandler) formatChatHistory(remoteNodeID string, ourNodeID string) string {
+	store := h.store.Load()
+	if store == nil {
+		return "📝 Chat History: (empty)"
+	}
+
+	coll := store.Load().(*msgs_store.IndexedMsgsCollection)
+
+	var builder strings.Builder
+	builder.WriteString("📝 Chat History:\n")
+	builder.WriteString("─────────────────\n")
+
+	// Collect all messages with their timestamps for sorting
+	type TimestampedMessage struct {
+		timestamp int64
+		senderID  string
+		content   string
+	}
+
+	var allMessages []TimestampedMessage
+
+	// Get messages from remote peer
+	if messages, ok := coll.Store[remoteNodeID]; ok {
+		for _, msg := range messages {
+			if chatMsg, ok := msg.(*ChatHistoryMessage); ok {
+				allMessages = append(allMessages, TimestampedMessage{
+					timestamp: chatMsg.Timestamp,
+					senderID:  chatMsg.SenderID,
+					content:   chatMsg.Content,
+				})
+			}
+		}
+	}
+
+	// Get messages from us (bot)
+	if messages, ok := coll.Store[ourNodeID]; ok {
+		for _, msg := range messages {
+			if chatMsg, ok := msg.(*ChatHistoryMessage); ok {
+				allMessages = append(allMessages, TimestampedMessage{
+					timestamp: chatMsg.Timestamp,
+					senderID:  chatMsg.SenderID,
+					content:   chatMsg.Content,
+				})
+			}
+		}
+	}
+
+	// Sort by timestamp
+	for i := 0; i < len(allMessages); i++ {
+		for j := i + 1; j < len(allMessages); j++ {
+			if allMessages[i].timestamp > allMessages[j].timestamp {
+				allMessages[i], allMessages[j] = allMessages[j], allMessages[i]
+			}
+		}
+	}
+
+	// Format messages
+	for _, msg := range allMessages {
+		timeStr := time.UnixMilli(msg.timestamp).Format("15:04:05")
+		var senderLabel string
+		if msg.senderID == remoteNodeID {
+			senderLabel = "👤 You"
+		} else {
+			senderLabel = "🤖 Bot"
+		}
+		builder.WriteString(fmt.Sprintf("[%s] %s: %s\n", timeStr, senderLabel, msg.content))
+	}
+
+	builder.WriteString("─────────────────\n")
+	builder.WriteString(fmt.Sprintf("Total: %d messages", len(allMessages)))
+
+	return builder.String()
 }
 
-// resetCounter resets the counter for the given remote node ID to 0
-func (h *ChatBotDCHandler) resetCounter(remoteNodeID string) {
-	// todo
-}
-
-// getCounter returns the current counter value for the given remote node ID
-func (h *ChatBotDCHandler) getCounter(remoteNodeID string) int {
-	// todo
-	return 0
-}
-
-// sendChatResponse sends a chat message response back to the peer
-func (h *ChatBotDCHandler) sendChatResponse(dc *webrtc.DataChannel, originalMsg *ChatMessage, responseText string) {
+// sendChatResponse sends a chat message response back to the peer and stores it
+func (h *ChatBotDCHandler) sendChatResponse(dc *webrtc.DataChannel, originalMsg *ChatMessage, responseText string, ourNodeID string) {
 	responseMsg := ChatMessage{
 		MessageID:  uuid.New().String(),
 		FromNodeID: originalMsg.ToNodeID,
@@ -143,6 +222,19 @@ func (h *ChatBotDCHandler) sendChatResponse(dc *webrtc.DataChannel, originalMsg 
 		Timestamp:  time.Now().UnixMilli(),
 		Message:    &responseText,
 	}
+
+	// Store our response
+	botMsg := &ChatHistoryMessage{
+		MessageID: responseMsg.MessageID,
+		SenderID:  ourNodeID,
+		Content:   responseText,
+		Timestamp: responseMsg.Timestamp,
+	}
+	if err := h.store.Append(botMsg); err != nil {
+		log.Printf("[webrtc] Failed to store bot message: %v", err)
+		return
+	}
+
 	responseData, err := json.Marshal(responseMsg)
 	if err != nil {
 		log.Printf("[webrtc] Failed to marshal response message: %v", err)
@@ -151,133 +243,4 @@ func (h *ChatBotDCHandler) sendChatResponse(dc *webrtc.DataChannel, originalMsg 
 	if err := dc.SendText(string(responseData)); err != nil {
 		log.Printf("[webrtc] Failed to send response: %v", err)
 	}
-}
-
-const exampleOutput string = `
-{
-"id": "gen-1772067607-bx2G4GM6pDOS5SyWQOnO",
-"provider": "AtlasCloud",
-"model": "deepseek/deepseek-v3.2",
-"object": "chat.completion",
-"created": 1772067607,
-"choices": [
-  {
-    "logprobs": null,
-    "finish_reason": "stop",
-    "native_finish_reason": "stop",
-    "index": 0,
-    "message": {
-      "role": "assistant",
-      "content": "The word \"strawberry\" contains three r's.",
-      "refusal": null,
-      "reasoning": "reasoning ...",
-      "reasoning_details": [
-        {
-          "format": "unknown",
-          "index": 0,
-          "type": "reasoning.text",
-          "text": "thinking ..."
-        }
-      ]
-    }
-  }
-],
-"system_fingerprint": null,
-"usage": {
-  "prompt_tokens": 18,
-  "completion_tokens": 400,
-  "total_tokens": 418,
-  "cost": 0.00015668,
-  "is_byok": false,
-  "prompt_tokens_details": {
-    "cached_tokens": 0,
-    "audio_tokens": 0
-  },
-  "cost_details": {
-    "upstream_inference_cost": 0.00015668,
-    "upstream_inference_prompt_cost": 0.00000468,
-    "upstream_inference_completions_cost": 0.000152
-  },
-  "completion_tokens_details": {
-    "reasoning_tokens": 386,
-    "audio_tokens": 0
-  }
-}
-}
-`
-
-type OpenRouterResponseLine struct {
-	ID                string             `json:"id"`
-	Provider          string             `json:"provider"`
-	Model             string             `json:"model"`
-	Object            string             `json:"object"`
-	Created           int64              `json:"created"`
-	Choices           []OpenRouterChoice `json:"choices"`
-	SystemFingerprint *string            `json:"system_fingerprint,omitempty"`
-	Usage             *OpenRouterUsage   `json:"usage,omitempty"`
-}
-
-type OpenRouterChoice struct {
-	Logprobs           interface{}        `json:"logprobs"`
-	FinishReason       string             `json:"finish_reason"`
-	NativeFinishReason string             `json:"native_finish_reason"`
-	Index              int                `json:"index"`
-	Message            *OpenRouterMessage `json:"message,omitempty"`
-}
-
-type OpenRouterMessage struct {
-	Role             string                      `json:"role"`
-	Content          string                      `json:"content"`
-	Refusal          *string                     `json:"refusal,omitempty"`
-	Reasoning        string                      `json:"reasoning"`
-	ReasoningDetails []OpenRouterReasoningDetail `json:"reasoning_details"`
-}
-
-type OpenRouterReasoningDetail struct {
-	Format string `json:"format"`
-	Index  int    `json:"index"`
-	Type   string `json:"type"`
-	Text   string `json:"text"`
-}
-
-type OpenRouterUsage struct {
-	PromptTokens            int                                `json:"prompt_tokens"`
-	CompletionTokens        int                                `json:"completion_tokens"`
-	TotalTokens             int                                `json:"total_tokens"`
-	Cost                    float64                            `json:"cost"`
-	IsByok                  bool                               `json:"is_byok"`
-	PromptTokensDetails     *OpenRouterPromptTokensDetails     `json:"prompt_tokens_details,omitempty"`
-	CostDetails             *OpenRouterCostDetails             `json:"cost_details,omitempty"`
-	CompletionTokensDetails *OpenRouterCompletionTokensDetails `json:"completion_tokens_details,omitempty"`
-}
-
-type OpenRouterPromptTokensDetails struct {
-	CachedTokens int `json:"cached_tokens"`
-	AudioTokens  int `json:"audio_tokens"`
-}
-
-type OpenRouterCostDetails struct {
-	UpstreamInferenceCost            float64 `json:"upstream_inference_cost"`
-	UpstreamInferencePromptCost      float64 `json:"upstream_inference_prompt_cost"`
-	UpstreamInferenceCompletionsCost float64 `json:"upstream_inference_completions_cost"`
-}
-
-type OpenRouterCompletionTokensDetails struct {
-	ReasoningTokens int `json:"reasoning_tokens"`
-	AudioTokens     int `json:"audio_tokens"`
-}
-
-type OpenAICompletionRequestMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
-}
-
-type OpenAICompletionRequestReasoning struct {
-	Enabled bool `json:"enabled"`
-}
-
-type OpenAICompletionRequest struct {
-	Model     string                           `json:"model"`
-	Messages  []OpenAICompletionRequestMessage `json:"messages"`
-	Reasoning OpenAICompletionRequestReasoning `json:"reasoning"`
 }

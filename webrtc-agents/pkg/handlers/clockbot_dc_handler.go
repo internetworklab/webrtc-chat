@@ -34,14 +34,14 @@ func (h *ClockBotDCHandler) Serve(ctx context.Context, dc *webrtc.DataChannel, s
 
 	switch dc.Label() {
 	case PredefinedDCLabelChat:
-		h.setupChatDataChannel(ctx, dc, remoteNodeID, signallingTx)
+		h.setupChatDataChannel(ctx, dc, remoteNodeID)
 	default:
 		log.Printf("[webrtc] Unknown (or unsupported) data channel label: %s", dc.Label())
 	}
 }
 
 // setupChatDataChannel sets up the chat data channel for handling messages
-func (h *ClockBotDCHandler) setupChatDataChannel(ctx context.Context, dc *webrtc.DataChannel, remoteNodeID string, signallingTx chan<- pkgframing.MessagePayload) {
+func (h *ClockBotDCHandler) setupChatDataChannel(ctx context.Context, dc *webrtc.DataChannel, remoteNodeID string) {
 	dc.OnOpen(func() {
 		log.Printf("[webrtc] Chat data channel opened with peer %s", remoteNodeID)
 	})
@@ -95,7 +95,7 @@ func (h *ClockBotDCHandler) setupChatDataChannel(ctx context.Context, dc *webrtc
 			// Handle /now command - start clock updates
 			if msgText == "/now" {
 				log.Printf("[webrtc] Received /now command from peer %s", remoteNodeID)
-				h.startClock(ctx, dc, &chatMsg, remoteNodeID, signallingTx)
+				h.startClock(ctx, dc, &chatMsg, remoteNodeID)
 				return
 			}
 		}
@@ -117,7 +117,7 @@ The clock will continue updating until you send another command or disconnect.`
 }
 
 // startClock initiates the clock update functionality
-func (h *ClockBotDCHandler) startClock(ctx context.Context, chatDC *webrtc.DataChannel, originalMsg *ChatMessage, remoteNodeID string, signallingTx chan<- pkgframing.MessagePayload) {
+func (h *ClockBotDCHandler) startClock(ctx context.Context, chatDC *webrtc.DataChannel, originalMsg *ChatMessage, remoteNodeID string) {
 	// Stop any existing clock updater for this peer
 	h.stopClockUpdater(remoteNodeID)
 
