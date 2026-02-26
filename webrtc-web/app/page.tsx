@@ -24,6 +24,7 @@ import {
   WellKnownAttributes,
   Preference,
   WSServer,
+  MessagePatchesMap,
 } from "@/apis/types";
 import { ChangePreference } from "@/components/ChangePreference";
 import {
@@ -62,6 +63,7 @@ import { RenderAvatar } from "@/components/RenderAvatar";
 import { createThumbnailFromFile } from "@/apis/thumbnail";
 import { useUnreads } from "@/apis/unreads";
 import { useScrollTop } from "@/apis/scrollTop";
+import { unmarshalMessagePatchOrder } from "@/apis/message_patch";
 
 const googleStunServer = "stun:stun.l.google.com:19302";
 const pingTimeoutMs = 3000;
@@ -85,6 +87,7 @@ type ConnTrack = Record<string, ConnTrackEntry>;
 
 function useWs(
   setConnTrackStatus: Dispatch<SetStateAction<ConnTrackStatus>>,
+  setMsgPatches: Dispatch<SetStateAction<MessagePatchesMap>>,
   audioCtxRef: RefObject<AudioContext | null>,
 ) {
   const [connected, setConnected] = useState(false);
@@ -257,35 +260,13 @@ function useWs(
               attachDCEventListeners(
                 dc,
                 setConnTrackStatus,
+                setMsgPatches,
                 remoteNodeId,
                 logSource,
                 onUnread,
               );
               if (dc.label === PredefinedDCLabel.Chat) {
                 ent.dataChannel = dc;
-              } else if (dc.label === PredefinedDCLabel.File) {
-                const dcKey = dc.id?.toString();
-                if (!dcKey) {
-                  console.error(
-                    `[dbg] [${logSource}] data channel id is not a string`,
-                    dc.id,
-                  );
-                  return;
-                }
-                if (!ent.fileDataChannels) {
-                  ent.fileDataChannels = {};
-                }
-                if (!(dcKey in ent.fileDataChannels)) {
-                  ent.fileDataChannels[dcKey] = dc;
-                  // todo: listen events from File DC
-                }
-              } else if (dc.label === PredefinedDCLabel.Ping) {
-                // no op
-              } else {
-                console.error(
-                  `[dbg] [${logSource}] unknown data channel label`,
-                  dc.label,
-                );
               }
             };
           }
@@ -632,6 +613,7 @@ function createFileTransferStatusEntry(
 function attachDCEventListeners(
   dc: RTCDataChannel,
   setConnTrackStatus: Dispatch<SetStateAction<ConnTrackStatus>>,
+  setMsgPatches: Dispatch<SetStateAction<MessagePatchesMap>>,
   remoteNodeId: string,
   logId: string,
   onUnread: (msgIds: string[]) => void,
@@ -754,6 +736,45 @@ function attachDCEventListeners(
         }
       } catch (e) {
         console.error("failed to parse data channel ping message", e);
+      }
+    };
+  } else if (dc.label == PredefinedDCLabel.MsgStream) {
+    dc.onmessage = (event) => {
+      console.log(
+        `[dbg]${logSource} message from dc, label: ${dc.label}, data:`,
+        event.data,
+      );
+      if (!(event.data instanceof ArrayBuffer)) {
+        console.error(
+          `[dbg]${logSource} message from dc, label: ${dc.label}, data:`,
+          event.data,
+          "is not of type ArrayBuffer",
+        );
+        return;
+      }
+      const data = event.data as ArrayBuffer;
+      try {
+        const patchOrder = unmarshalMessagePatchOrder(data);
+        console.log(
+          `[dbg]${logSource} parsed message patch order:`,
+          patchOrder,
+        );
+        if (patchOrder) {
+          setMsgPatches((prev) => ({
+            ...prev,
+            [patchOrder.MessageID]: [
+              ...(prev[patchOrder.MessageID] || []),
+              patchOrder,
+            ],
+          }));
+        }
+      } catch (err) {
+        console.error(
+          `[dbg]${logSource} message from dc, label: ${dc.label}, data:`,
+          event.data,
+          "can not be parsed:",
+          err,
+        );
       }
     };
   }
@@ -1346,6 +1367,7 @@ function determineFollowingMode(msgsBox: HTMLDivElement) {
 
 export default function Home() {
   const [connTrackStatus, setConnTrackStatus] = useState<ConnTrackStatus>({});
+  const [msgPatches, setMsgPatches] = useState<MessagePatchesMap>({});
   const audioCtxRef = useRef<AudioContext | null>(null);
 
   const {
@@ -1360,7 +1382,7 @@ export default function Home() {
     wsRef,
     doConnect,
     connTrackRef,
-  } = useWs(setConnTrackStatus, audioCtxRef);
+  } = useWs(setConnTrackStatus, setMsgPatches, audioCtxRef);
 
   const name = conns
     ? conns.find((conn) => conn.node_id === nodeId)?.entry?.node_name
@@ -1404,6 +1426,7 @@ export default function Home() {
       attachDCEventListeners(
         ent.dataChannel,
         setConnTrackStatus,
+        setMsgPatches,
         remoteNodeId,
         logSource,
         onUnread,
@@ -1962,8 +1985,9 @@ export default function Home() {
                 >
                   {messages.map((message) => (
                     <RenderMessage
-                      message={message}
                       key={message.messageId}
+                      message={message}
+                      patches={msgPatches[message.messageId] || []}
                       onAmend={(amendedMsg) => {
                         sendAmendMsg(amendedMsg);
                       }}

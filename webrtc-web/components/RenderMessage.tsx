@@ -6,6 +6,8 @@ import {
   ChatMessageFileCategory,
   ChatMessageSongTrack,
   FileTransferStatusEntry,
+  MessagePatchOrder,
+  MessagePatchOrderKind,
   Preference,
 } from "@/apis/types";
 import {
@@ -340,7 +342,7 @@ function stopSong(
   analyzerNodeRef.current?.disconnect?.();
 }
 
-const defaultVolume = 0.5;
+const defaultVolume = 0.3;
 
 function FFTVisualization(props: {
   updateIntvMs: number;
@@ -659,8 +661,26 @@ function RenderSongTrack(props: {
   );
 }
 
+function applyMessagePatches(
+  origin: string,
+  patches: MessagePatchOrder[],
+): string {
+  let result = origin;
+  for (const patch of patches) {
+    if (patch.Kind === MessagePatchOrderKind.Append) {
+      result = result + patch.Value;
+    } else if (patch.Kind == MessagePatchOrderKind.Replace) {
+      result = patch.Value;
+    } else {
+      console.error("Unknown patch kind:", patch, patch.Kind);
+    }
+  }
+  return result;
+}
+
 export function RenderMessage(props: {
   message: ChatMessage;
+  patches: MessagePatchOrder[] | undefined;
   onAmend: (amendedMsg: ChatMessage) => void;
   onDelete: (deletedMsgId: string) => void;
   fileTransferStatus: Record<string, FileTransferStatusEntry>;
@@ -670,6 +690,7 @@ export function RenderMessage(props: {
   // todo: add message edit feature and delete feature in context menu
   const {
     message,
+    patches = [],
     onAmend,
     onDelete,
     fileTransferStatus,
@@ -682,6 +703,13 @@ export function RenderMessage(props: {
 
   const preferDark = useMediaQuery("(prefers-color-scheme: dark)");
   const { mode } = useColorScheme();
+
+  let plainTextMsg: string | undefined = undefined;
+  if (message.message) {
+    plainTextMsg = applyMessagePatches(message.message, patches);
+  } else if (patches && patches.length > 0) {
+    plainTextMsg = applyMessagePatches("", patches);
+  }
 
   return (
     <Box
@@ -745,7 +773,7 @@ export function RenderMessage(props: {
               audioContextRef={audioContextRef}
             />
           )}
-          {message.message && (
+          {plainTextMsg && (
             <Box
               sx={{
                 padding: 2,
@@ -757,7 +785,7 @@ export function RenderMessage(props: {
                 width: "max-content",
               }}
             >
-              {message.message}
+              {plainTextMsg}
             </Box>
           )}
           {message.richText && (

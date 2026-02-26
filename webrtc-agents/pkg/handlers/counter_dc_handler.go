@@ -14,12 +14,6 @@ import (
 	"github.com/pion/webrtc/v4"
 )
 
-type GeneralPropertyKey string
-
-const (
-	GP_Key_NodeId = "node_id"
-)
-
 // CounterHandler handles WebRTC peer connections with per-user counter functionality
 type CounterDCHandler struct {
 	counters sync.Map

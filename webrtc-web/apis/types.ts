@@ -259,15 +259,32 @@ export type ConnTrackStatusEntry = {
   fileTransferStatus?: Record<string, FileTransferStatusEntry>;
 
   avatarUrl?: string;
+
+  queuedMessagePathOrders?: MessagePatchOrder[];
 };
 
 // key is the node_id of remote peer
 export type ConnTrackStatus = Record<string, ConnTrackStatusEntry>;
 
+// key is the message id of the message being patched
+export type MessagePatchesMap = Record<string, MessagePatchOrder[]>;
+
 export enum PredefinedDCLabel {
   Chat = "chat",
   File = "file",
   Ping = "ping",
+  MsgStream = "msgpatch",
+}
+
+export enum MessagePatchOrderKind {
+  Append = 0,
+  Replace = 1,
+}
+
+export interface MessagePatchOrder {
+  MessageID: string;
+  Kind: MessagePatchOrderKind;
+  Value: string;
 }
 
 export type PingStateRef = {
@@ -289,9 +306,6 @@ export type ConnTrackEntry = {
 
   // this is the chat DC
   dataChannel?: RTCDataChannel | null;
-
-  // key is the value of RTCDataChannel.id, all file DCs shared label PredefinedDCLabel.File
-  fileDataChannels?: Record<string, RTCDataChannel>;
 
   pingSeqRef?: PingStateRef;
 
