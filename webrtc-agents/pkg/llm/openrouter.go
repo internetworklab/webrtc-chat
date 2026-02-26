@@ -15,13 +15,41 @@ const (
 	openRouterTimeout = 60 * time.Second
 )
 
+type AuthorizationHeaderBuilder func(apikey string) string
+
+func defaultAuthHeaderGetter(apiKey string) string {
+	return fmt.Sprintf("Bearer %s", apiKey)
+}
+
 type OpenRouterCompletionProxy struct {
-	apiKey     string
-	httpClient *http.Client
+	APIKey                 string
+	HttpClient             *http.Client
+	BaseURL                string
+	GetAuthorizationHeader AuthorizationHeaderBuilder
+}
+
+func (p *OpenRouterCompletionProxy) getAPIKey() string {
+	return p.APIKey
+}
+
+func (p *OpenRouterCompletionProxy) getHttpClient() *http.Client {
+	if p.HttpClient == nil {
+		return &http.Client{
+			Timeout: openRouterTimeout,
+		}
+	}
+	return p.HttpClient
+}
+
+func (p *OpenRouterCompletionProxy) getBaseURL() string {
+	if p.BaseURL == "" {
+		return openRouterBaseURL
+	}
+	return p.BaseURL
 }
 
 func (p *OpenRouterCompletionProxy) Generate(ctx context.Context, request OpenRouterCompletionRequest) OpenRouterResponse {
-	url := openRouterBaseURL + "/chat/completions"
+	url := p.getBaseURL() + "/chat/completions"
 
 	bodyBytes, err := json.Marshal(request)
 	if err != nil {
@@ -66,9 +94,13 @@ func (p *OpenRouterCompletionProxy) Generate(ctx context.Context, request OpenRo
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+p.apiKey)
+	if p.GetAuthorizationHeader == nil {
+		p.GetAuthorizationHeader = defaultAuthHeaderGetter
+	}
+	authHeader := p.GetAuthorizationHeader(p.getAPIKey())
+	req.Header.Set("Authorization", authHeader)
 
-	resp, err := p.httpClient.Do(req)
+	resp, err := p.getHttpClient().Do(req)
 	if err != nil {
 		return OpenRouterResponse{
 			ID:       "",
