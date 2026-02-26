@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	pkgllm "webrtc-agents/pkg/llm"
 	"webrtc-agents/pkg/msgs_store"
 
 	pkgframing "example.com/webrtcserver/pkg/framing"
@@ -75,14 +76,14 @@ func (m *ChatHistoryMessage) GetSessionId() string {
 
 // ChatBotDCHandler handles WebRTC data channel for chatbot functionality
 type ChatBotDCHandler struct {
-	APIKey string
+	llmGen pkgllm.CompletionGenerator
 	store  *msgs_store.SyncMsgsStore
 }
 
 // NewChatBotDCHandler creates a new ChatBotDCHandler
-func NewChatBotDCHandler(apiKey string) *ChatBotDCHandler {
+func NewChatBotDCHandler(llmGen pkgllm.CompletionGenerator) *ChatBotDCHandler {
 	return &ChatBotDCHandler{
-		APIKey: apiKey,
+		llmGen: llmGen,
 		store: msgs_store.NewSyncMsgsStore(func() msgs_store.MsgsCollection {
 			return NewIndexedMsgsCollection()
 		}),
