@@ -8,24 +8,69 @@ import (
 	"strings"
 	"time"
 
+	"webrtc-agents/pkg/msgs_store"
+
 	pkgframing "example.com/webrtcserver/pkg/framing"
-	"example.com/webrtcserver/pkg/msgs_store"
 
 	"github.com/google/uuid"
 	"github.com/pion/webrtc/v4"
 )
 
+// Index by session id
+type IndexedMsgsCollection struct {
+	store map[string][]interface{}
+}
+
+func NewIndexedMsgsCollection() *IndexedMsgsCollection {
+	return &IndexedMsgsCollection{
+		store: make(map[string][]interface{}),
+	}
+}
+
+type IdentifiableMessage interface {
+	GetSessionId() string
+}
+
+func (indexColl *IndexedMsgsCollection) DeepClone() msgs_store.MsgsCollection {
+	newMap := make(map[string][]interface{})
+	for sessionId, li := range indexColl.store {
+		newList := make([]interface{}, len(li))
+		copy(newList, li)
+		newMap[sessionId] = newList
+	}
+	newIndexColl := new(IndexedMsgsCollection)
+	newIndexColl.store = newMap
+	return newIndexColl
+}
+
+func (indexColl *IndexedMsgsCollection) Append(msg interface{}) {
+	sessionId := ""
+	if identifiable, ok := msg.(IdentifiableMessage); ok {
+		sessionId = identifiable.GetSessionId()
+	}
+	indexColl.store[sessionId] = append(indexColl.store[sessionId], msg)
+}
+
+// GetMessagesBySessionId returns messages for a specific session
+func (indexColl *IndexedMsgsCollection) GetMessagesBySessionId(sessionId string) []interface{} {
+	return indexColl.store[sessionId]
+}
+
 // ChatHistoryMessage represents a message in the chat history
 type ChatHistoryMessage struct {
 	MessageID string
 	SenderID  string
+
+	// session id should be form by our id (bot's node id) then peer id
+	// e.g. "<ourid>-<peerid>"
+	SessionID string
 	Content   string
 	Timestamp int64
 }
 
-// GetSenderId implements msgs_store.IdentifiableMessage interface
-func (m *ChatHistoryMessage) GetSenderId() string {
-	return m.SenderID
+// GetSessionId implements IdentifiableMessage interface
+func (m *ChatHistoryMessage) GetSessionId() string {
+	return m.SessionID
 }
 
 // ChatBotDCHandler handles WebRTC data channel for chatbot functionality
@@ -38,7 +83,9 @@ type ChatBotDCHandler struct {
 func NewChatBotDCHandler(apiKey string) *ChatBotDCHandler {
 	return &ChatBotDCHandler{
 		APIKey: apiKey,
-		store:  msgs_store.NewSyncMsgsStore(),
+		store: msgs_store.NewSyncMsgsStore(func() msgs_store.MsgsCollection {
+			return NewIndexedMsgsCollection()
+		}),
 	}
 }
 
@@ -95,10 +142,14 @@ func (h *ChatBotDCHandler) setupChatDataChannel(dc *webrtc.DataChannel, remoteNo
 		// Send ACK for the received message
 		h.sendACK(dc, &chatMsg)
 
+		// Build session ID: "<ourid>-<peerid>"
+		sessionID := fmt.Sprintf("%s-%s", ourNodeID, remoteNodeID)
+
 		// Store the user's message
 		userMsg := &ChatHistoryMessage{
 			MessageID: chatMsg.MessageID,
 			SenderID:  remoteNodeID,
+			SessionID: sessionID,
 			Content:   content,
 			Timestamp: chatMsg.Timestamp,
 		}
@@ -109,7 +160,7 @@ func (h *ChatBotDCHandler) setupChatDataChannel(dc *webrtc.DataChannel, remoteNo
 
 		// Format and send chat history as response
 		chatHistory := h.formatChatHistory(remoteNodeID, ourNodeID)
-		h.sendChatResponse(dc, &chatMsg, chatHistory, ourNodeID)
+		h.sendChatResponse(dc, &chatMsg, chatHistory, ourNodeID, remoteNodeID)
 	})
 
 	dc.OnError(func(err error) {
@@ -145,11 +196,17 @@ func (h *ChatBotDCHandler) formatChatHistory(remoteNodeID string, ourNodeID stri
 		return "📝 Chat History: (empty)"
 	}
 
-	coll := store.Load().(*msgs_store.IndexedMsgsCollection)
+	coll := store.Load().(*IndexedMsgsCollection)
 
 	var builder strings.Builder
 	builder.WriteString("📝 Chat History:\n")
 	builder.WriteString("─────────────────\n")
+
+	// Build session ID: "<ourid>-<peerid>"
+	sessionID := fmt.Sprintf("%s-%s", ourNodeID, remoteNodeID)
+
+	// Get all messages for this session
+	messages := coll.GetMessagesBySessionId(sessionID)
 
 	// Collect all messages with their timestamps for sorting
 	type TimestampedMessage struct {
@@ -160,29 +217,13 @@ func (h *ChatBotDCHandler) formatChatHistory(remoteNodeID string, ourNodeID stri
 
 	var allMessages []TimestampedMessage
 
-	// Get messages from remote peer
-	if messages, ok := coll.Store[remoteNodeID]; ok {
-		for _, msg := range messages {
-			if chatMsg, ok := msg.(*ChatHistoryMessage); ok {
-				allMessages = append(allMessages, TimestampedMessage{
-					timestamp: chatMsg.Timestamp,
-					senderID:  chatMsg.SenderID,
-					content:   chatMsg.Content,
-				})
-			}
-		}
-	}
-
-	// Get messages from us (bot)
-	if messages, ok := coll.Store[ourNodeID]; ok {
-		for _, msg := range messages {
-			if chatMsg, ok := msg.(*ChatHistoryMessage); ok {
-				allMessages = append(allMessages, TimestampedMessage{
-					timestamp: chatMsg.Timestamp,
-					senderID:  chatMsg.SenderID,
-					content:   chatMsg.Content,
-				})
-			}
+	for _, msg := range messages {
+		if chatMsg, ok := msg.(*ChatHistoryMessage); ok {
+			allMessages = append(allMessages, TimestampedMessage{
+				timestamp: chatMsg.Timestamp,
+				senderID:  chatMsg.SenderID,
+				content:   chatMsg.Content,
+			})
 		}
 	}
 
@@ -214,7 +255,10 @@ func (h *ChatBotDCHandler) formatChatHistory(remoteNodeID string, ourNodeID stri
 }
 
 // sendChatResponse sends a chat message response back to the peer and stores it
-func (h *ChatBotDCHandler) sendChatResponse(dc *webrtc.DataChannel, originalMsg *ChatMessage, responseText string, ourNodeID string) {
+func (h *ChatBotDCHandler) sendChatResponse(dc *webrtc.DataChannel, originalMsg *ChatMessage, responseText string, ourNodeID string, remoteNodeID string) {
+	// Build session ID: "<ourid>-<peerid>"
+	sessionID := fmt.Sprintf("%s-%s", ourNodeID, remoteNodeID)
+
 	responseMsg := ChatMessage{
 		MessageID:  uuid.New().String(),
 		FromNodeID: originalMsg.ToNodeID,
@@ -227,6 +271,7 @@ func (h *ChatBotDCHandler) sendChatResponse(dc *webrtc.DataChannel, originalMsg 
 	botMsg := &ChatHistoryMessage{
 		MessageID: responseMsg.MessageID,
 		SenderID:  ourNodeID,
+		SessionID: sessionID,
 		Content:   responseText,
 		Timestamp: responseMsg.Timestamp,
 	}
