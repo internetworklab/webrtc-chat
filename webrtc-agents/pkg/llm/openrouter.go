@@ -6,7 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"net/url"
+	"os"
 	"time"
 )
 
@@ -23,9 +26,23 @@ func defaultAuthHeaderGetter(apiKey string) string {
 
 type OpenRouterCompletionProxy struct {
 	APIKey                 string
+	APIKeyFromEnv          string
 	HttpClient             *http.Client
 	BaseURL                string
 	GetAuthorizationHeader AuthorizationHeaderBuilder
+}
+
+func (p *OpenRouterCompletionProxy) getAPIKey() string {
+	if apiKey := p.APIKey; apiKey != "" {
+		return apiKey
+	}
+	if apiKeyEnv := p.APIKeyFromEnv; apiKeyEnv != "" {
+		if apiKey := os.Getenv(apiKeyEnv); apiKey != "" {
+			return apiKey
+		}
+	}
+	log.New(os.Stderr, "[OpenRouterCompletionProxy] ", log.LUTC).Printf("[WARN] API key is empty, this usually shouldn't happen")
+	return ""
 }
 
 func (p *OpenRouterCompletionProxy) getHttpClient() *http.Client {
@@ -62,15 +79,28 @@ func (p *OpenRouterCompletionProxy) getErrorResponse(model string, content strin
 	}
 }
 
+func (p *OpenRouterCompletionProxy) getCompletionURL() (url.URL, error) {
+	baseURL := p.getBaseURL()
+	parsedURL, err := url.Parse(baseURL)
+	if err != nil {
+		return url.URL{}, fmt.Errorf("failed to parse base URL: %w", err)
+	}
+	parsedURL.Path = parsedURL.Path + "/chat/completions"
+	return *parsedURL, nil
+}
+
 func (p *OpenRouterCompletionProxy) Generate(ctx context.Context, request OpenRouterCompletionRequest) OpenRouterResponse {
-	url := p.getBaseURL() + "/chat/completions"
+	completionURL, err := p.getCompletionURL()
+	if err != nil {
+		return p.getErrorResponse(request.Model, fmt.Sprintf("Failed to build completion URL: %v", err))
+	}
 
 	bodyBytes, err := json.Marshal(request)
 	if err != nil {
 		return p.getErrorResponse(request.Model, fmt.Sprintf("Failed to marshal request: %v", err))
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(bodyBytes))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, completionURL.String(), bytes.NewReader(bodyBytes))
 	if err != nil {
 		return p.getErrorResponse(request.Model, fmt.Sprintf("Failed to create request: %v", err))
 	}
@@ -80,7 +110,7 @@ func (p *OpenRouterCompletionProxy) Generate(ctx context.Context, request OpenRo
 	if p.GetAuthorizationHeader != nil {
 		authHeaderGetter = p.GetAuthorizationHeader
 	}
-	authHeader := authHeaderGetter(p.APIKey)
+	authHeader := authHeaderGetter(p.getAPIKey())
 	req.Header.Set("Authorization", authHeader)
 
 	resp, err := p.getHttpClient().Do(req)
