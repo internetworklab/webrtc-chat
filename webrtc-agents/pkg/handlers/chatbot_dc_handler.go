@@ -152,3 +152,56 @@ func (h *ChatBotDCHandler) sendChatResponse(dc *webrtc.DataChannel, originalMsg 
 		log.Printf("[webrtc] Failed to send response: %v", err)
 	}
 }
+
+const exampleOutput string = `
+{
+"id": "gen-1772067607-bx2G4GM6pDOS5SyWQOnO",
+"provider": "AtlasCloud",
+"model": "deepseek/deepseek-v3.2",
+"object": "chat.completion",
+"created": 1772067607,
+"choices": [
+  {
+    "logprobs": null,
+    "finish_reason": "stop",
+    "native_finish_reason": "stop",
+    "index": 0,
+    "message": {
+      "role": "assistant",
+      "content": "The word \"strawberry\" contains three r's.",
+      "refusal": null,
+      "reasoning": "reasoning ...",
+      "reasoning_details": [
+        {
+          "format": "unknown",
+          "index": 0,
+          "type": "reasoning.text",
+          "text": "thinking ..."
+        }
+      ]
+    }
+  }
+],
+"system_fingerprint": null,
+"usage": {
+  "prompt_tokens": 18,
+  "completion_tokens": 400,
+  "total_tokens": 418,
+  "cost": 0.00015668,
+  "is_byok": false,
+  "prompt_tokens_details": {
+    "cached_tokens": 0,
+    "audio_tokens": 0
+  },
+  "cost_details": {
+    "upstream_inference_cost": 0.00015668,
+    "upstream_inference_prompt_cost": 0.00000468,
+    "upstream_inference_completions_cost": 0.000152
+  },
+  "completion_tokens_details": {
+    "reasoning_tokens": 386,
+    "audio_tokens": 0
+  }
+}
+}
+`
