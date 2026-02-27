@@ -47,25 +47,18 @@ RUN \
     PKG_CONFIG_PATH=/usr/lib/$tpl/pkgconfig CC=/usr/bin/$tpl-gcc CGO_ENABLED=1 GOOS=linux GOARCH=$TARGETARCH go build -o /build/webrtc-agents/bin/agents ./cmd/agents
 
 # Runtime stage
-FROM debian:trixie-slim
+FROM --platform=$TARGETPLATFORM debian:trixie-slim
 
 # Install runtime dependencies (only what's needed to run the binary)
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     libopus0 \
     libopusfile0 \
     ca-certificates \
-    && rm -rf /var/lib/apt/lists/* \
-    && useradd --create-home --shell /bin/bash appuser
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 # Copy the binary from builder
 COPY --from=builder /build/webrtc-agents/bin/agents /app/agents
-
-# Use non-root user for security
-USER appuser
-
-# Default environment variables (can be overridden at runtime)
-ENV WS_SERVER=ws://localhost:3001/ws
 
 ENTRYPOINT ["/app/agents"]
