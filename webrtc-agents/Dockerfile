@@ -42,10 +42,11 @@ ARG TARGETOS
 RUN \
     mkdir -p /build/webrtc-agents/bin  && \
     tpl=$(v=$TARGETARCH l=$TARGETOS bash -c 'declare -A arch_translate=([amd64]=x86_64 [arm64]=aarch64); echo -n ${arch_translate[$v]}; echo -n "-"; echo -n "$l"; echo -n "-gnu"') && \
-    PKG_CONFIG_PATH=/usr/lib/$tpl/pkgconfig CC=/usr/bin/$tpl-gcc CGO_ENABLED=1 GOOS=linux GOARCH=$TARGETARCH go build -o /build/webrtc-agents/bin/agents ./cmd/agents
+    PKG_CONFIG_PATH=/usr/lib/$tpl/pkgconfig CC=/usr/bin/$tpl-gcc CGO_ENABLED=1 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /build/webrtc-agents/bin/agents ./cmd/agents
 
 # Runtime stage
-FROM --platform=$TARGETPLATFORM debian:trixie-slim
+# Note --platform=$TARGETPLATFORM is default behavior, so, no need to do that explicitly
+FROM debian:trixie-slim
 
 # Install runtime dependencies (only what's needed to run the binary)
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
