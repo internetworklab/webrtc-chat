@@ -52,17 +52,17 @@ func main() {
 	wsHandler := pkghandler.NewWebsocketHandler(&upgrader, cr, cli.WsTimeout)
 
 	var connsHandler http.Handler = pkghandler.NewConnsHandler(cr)
-	if cli.InjectAllowAllCorsHeaders {
-		connsHandler = pkghandler.WithCORSAllowAny(connsHandler)
-	}
 
 	mux := http.NewServeMux()
 	mux.Handle(cli.WsPath, wsHandler)
-
 	mux.Handle("/conns", connsHandler)
+
 	server := &http.Server{
 		Addr:    cli.ListenAddr,
 		Handler: mux,
+	}
+	if cli.InjectAllowAllCorsHeaders {
+		server.Handler = pkghandler.WithCORSAllowAny(server.Handler)
 	}
 	log.Printf("Starting server on %s", cli.ListenAddr)
 	server.ListenAndServe()
