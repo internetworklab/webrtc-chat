@@ -1,17 +1,22 @@
 # Build stage
-FROM debian:trixie AS builder
+ARG BUILDPLATFORM
+
+FROM --platform=$BUILDPLATFORM debian:trixie AS build-env
+
+ARG TARGETARCH
 
 # Install build dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN dpkg --add-architecture ${TARGETARCH} && apt-get update -y && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     golang-go \
     pkg-config \
-    libopus-dev \
-    libopusfile-dev \
+    libopus-dev:${TARGETARCH} \
+    libopusfile-dev:${TARGETARCH} \
     git \
     ca-certificates \
-    gcc \
-    build-essential \
+    crossbuild-essential-${TARGETARCH} \
     && rm -rf /var/lib/apt/lists/*
+
+# gcc-14-multilib-x86-64-linux-gnu \
 
 WORKDIR /build
 
@@ -27,19 +32,22 @@ COPY webrtc-server/ ./webrtc-server/
 COPY webrtc-agents/ ./webrtc-agents/
 
 WORKDIR /build/webrtc-agents
-RUN go mod download
+RUN CGO_ENABLED=1 GOOS=linux GOARCH=$TARGETARCH go mod download
+
+ARG BUILDPLATFORM
+FROM --platform=$BUILDPLATFORM build-env AS builder
 
 # Build the binary
 ARG TARGETARCH
 RUN \
     mkdir -p /build/webrtc-agents/bin  && \
-    CGO_ENABLED=1 GOOS=linux GOARCH=$TARGETARCH go build -ldflags="-s -w" -o /build/webrtc-agents/bin/agents ./cmd/agents
+    PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig CC=/usr/bin/x86_64-linux-gnu-gcc CGO_ENABLED=1 GOOS=linux GOARCH=$TARGETARCH go build -o /build/webrtc-agents/bin/agents ./cmd/agents
 
 # Runtime stage
 FROM debian:trixie-slim
 
 # Install runtime dependencies (only what's needed to run the binary)
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     libopus0 \
     libopusfile0 \
     ca-certificates \
