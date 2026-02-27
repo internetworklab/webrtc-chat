@@ -8,34 +8,59 @@ import (
 	pkgconnreg "example.com/webrtcserver/pkg/connreg"
 	pkghandler "example.com/webrtcserver/pkg/handler"
 	pkgsafemap "example.com/webrtcserver/pkg/safemap"
+
+	"github.com/alecthomas/kong"
 	"github.com/gorilla/websocket"
 )
 
-var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool {
-		return true
-	},
+type CLI struct {
+	ListenAddr         string        `name:"listen-addr" help:"Address to listen on" default:":3001"`
+	WsTimeout          time.Duration `name:"ws-timeout" help:"WebSocket timeout duration" default:"10s"`
+	WsPath             string        `name:"ws-path" help:"WebSocket path" default:"/ws"`
+	AllowedOrigins     []string      `name:"allowed-origin" help:"Allowed origins for CORS (may be specified multiple times)"`
+	DefaultCorsAllowed bool          `name:"default-cors-allowed" help:"Allow requests with absent Origin header" default:"true"`
+}
+
+var cli CLI
+
+// getOriginValidator returns a function that validates the Origin header
+// against a list of allowed origins.
+func (c *CLI) getOriginValidator() func(r *http.Request) bool {
+	return func(r *http.Request) bool {
+		if origin := r.Header.Get("Origin"); origin != "" {
+			for _, allowed := range c.AllowedOrigins {
+				if origin == allowed {
+					return true
+				}
+			}
+			return false
+		}
+		return c.DefaultCorsAllowed
+	}
 }
 
 func main() {
-	listenAddr := ":3001"
-	wsTimeout := 10 * time.Second
-	wsPath := "/ws"
+	kong.Parse(&cli)
+
+	upgrader := websocket.Upgrader{
+		CheckOrigin: cli.getOriginValidator(),
+	}
+
 	sm := pkgsafemap.NewSafeMap()
 	cr := pkgconnreg.NewConnRegistry(sm)
-	wsHandler := pkghandler.NewWebsocketHandler(&upgrader, cr, wsTimeout)
+	wsHandler := pkghandler.NewWebsocketHandler(&upgrader, cr, cli.WsTimeout)
 
 	var connsHandler http.Handler = pkghandler.NewConnsHandler(cr)
 	connsHandler = pkghandler.WithCORSAllowAny(connsHandler)
 
 	mux := http.NewServeMux()
-	mux.Handle(wsPath, wsHandler)
+	mux.Handle(cli.WsPath, wsHandler)
 
 	mux.Handle("/conns", connsHandler)
 	server := &http.Server{
-		Addr:    listenAddr,
+		Addr:    cli.ListenAddr,
 		Handler: mux,
 	}
-	log.Printf("Starting server on %s", listenAddr)
+	log.Printf("Starting server on %s", cli.ListenAddr)
 	server.ListenAndServe()
 }
