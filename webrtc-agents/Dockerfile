@@ -14,6 +14,7 @@ RUN dpkg --add-architecture ${TARGETARCH} && apt-get update -y && DEBIAN_FRONTEN
     git \
     ca-certificates \
     crossbuild-essential-${TARGETARCH} \
+    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 # gcc-14-multilib-x86-64-linux-gnu \
@@ -39,9 +40,11 @@ FROM --platform=$BUILDPLATFORM build-env AS builder
 
 # Build the binary
 ARG TARGETARCH
+ARG TARGETOS
 RUN \
     mkdir -p /build/webrtc-agents/bin  && \
-    PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig CC=/usr/bin/x86_64-linux-gnu-gcc CGO_ENABLED=1 GOOS=linux GOARCH=$TARGETARCH go build -o /build/webrtc-agents/bin/agents ./cmd/agents
+    tpl=$(v=$TARGETARCH l=$TARGETOS bash -c 'declare -A arch_translate=([amd64]=x86_64 [arm64]=aarch64); echo -n ${arch_translate[$v]}; echo -n "-"; echo -n "$l"; echo -n "-gnu"') && \
+    PKG_CONFIG_PATH=/usr/lib/$tpl/pkgconfig CC=/usr/bin/$tpl-gcc CGO_ENABLED=1 GOOS=linux GOARCH=$TARGETARCH go build -o /build/webrtc-agents/bin/agents ./cmd/agents
 
 # Runtime stage
 FROM debian:trixie-slim
