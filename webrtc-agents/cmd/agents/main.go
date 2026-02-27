@@ -43,20 +43,24 @@ func main() {
 		log.Fatal("Failed to parse WebSocket URL:", err)
 	}
 
+	getWsRunnerByDerivedCfg := func(nodeName string) *pkgwsrunner.WebSocketRunner {
+		return &pkgwsrunner.WebSocketRunner{
+			URL:                   *u,
+			PingIntv:              cli.PingPeriod,
+			Debug:                 cli.Debug,
+			ReconnectOnDisconnect: cli.ReconnectOnDisconnect,
+			ReconnectDelay:        cli.ReconnectDelay,
+			NodeName:              nodeName,
+		}
+	}
+
 	// Create context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	var echoBotHandler pkghandlers.GenericWebRTCHandler
 	echoBotHandler = pkghandlers.NewSignallingHandler(pkghandlers.WithPingHandler(&pkghandlers.EchoDCHandler{}), cli.ICEServer, cli.Debug, nil)
-	echoBotRunner := &pkgwsrunner.WebSocketRunner{
-		URL:                   *u,
-		PingIntv:              cli.PingPeriod,
-		Debug:                 cli.Debug,
-		ReconnectOnDisconnect: cli.ReconnectOnDisconnect,
-		ReconnectDelay:        cli.ReconnectDelay,
-		NodeName:              "EchoBot",
-	}
+	echoBotRunner := getWsRunnerByDerivedCfg("EchoBot")
 	go echoBotRunner.Run(ctx, echoBotHandler)
 	log.Println("Echo bot started!")
 
@@ -105,40 +109,19 @@ func main() {
 		log.Fatalf("Failed to create track data channel handler: %v", err)
 	}
 	musicBotHandler = pkghandlers.NewSignallingHandler(pkghandlers.WithPingHandler(trackDCHandler), cli.ICEServer, cli.Debug, api)
-	musicBotRunner := &pkgwsrunner.WebSocketRunner{
-		URL:                   *u,
-		PingIntv:              cli.PingPeriod,
-		Debug:                 cli.Debug,
-		ReconnectOnDisconnect: cli.ReconnectOnDisconnect,
-		ReconnectDelay:        cli.ReconnectDelay,
-		NodeName:              "MusicBot",
-	}
+	musicBotRunner := getWsRunnerByDerivedCfg("MusicBot")
 	go musicBotRunner.Run(ctx, musicBotHandler)
 	log.Println("Music bot started!")
 
 	var counterBotHandler pkghandlers.GenericWebRTCHandler
 	counterBotHandler = pkghandlers.NewSignallingHandler(pkghandlers.WithPingHandler(pkghandlers.NewCounterDCHandler()), cli.ICEServer, cli.Debug, nil)
-	counterBotRunner := &pkgwsrunner.WebSocketRunner{
-		URL:                   *u,
-		PingIntv:              cli.PingPeriod,
-		Debug:                 cli.Debug,
-		ReconnectOnDisconnect: cli.ReconnectOnDisconnect,
-		ReconnectDelay:        cli.ReconnectDelay,
-		NodeName:              "CounterBot",
-	}
+	counterBotRunner := getWsRunnerByDerivedCfg("CounterBot")
 	go counterBotRunner.Run(ctx, counterBotHandler)
 	log.Println("Counter bot started!")
 
 	var clockBotHandler pkghandlers.GenericWebRTCHandler
 	clockBotHandler = pkghandlers.NewSignallingHandler(pkghandlers.WithPingHandler(pkghandlers.NewClockBotDCHandler()), cli.ICEServer, cli.Debug, nil)
-	clockBotRunner := &pkgwsrunner.WebSocketRunner{
-		URL:                   *u,
-		PingIntv:              cli.PingPeriod,
-		Debug:                 cli.Debug,
-		ReconnectOnDisconnect: cli.ReconnectOnDisconnect,
-		ReconnectDelay:        cli.ReconnectDelay,
-		NodeName:              "ClockBot",
-	}
+	clockBotRunner := getWsRunnerByDerivedCfg("ClockBot")
 	go clockBotRunner.Run(ctx, clockBotHandler)
 	log.Println("Clock bot started!")
 
@@ -148,14 +131,7 @@ func main() {
 		APIKeyFromEnv: cli.OpenRouterAPIKeyEnv,
 	}
 	chatBotHandler = pkghandlers.NewSignallingHandler(pkghandlers.WithPingHandler(pkghandlers.NewChatBotDCHandler(chatBotLLM)), cli.ICEServer, cli.Debug, nil)
-	chatBotRunner := &pkgwsrunner.WebSocketRunner{
-		URL:                   *u,
-		PingIntv:              cli.PingPeriod,
-		Debug:                 cli.Debug,
-		ReconnectOnDisconnect: cli.ReconnectOnDisconnect,
-		ReconnectDelay:        cli.ReconnectDelay,
-		NodeName:              "ChatBot",
-	}
+	chatBotRunner := getWsRunnerByDerivedCfg("ChatBot")
 	go chatBotRunner.Run(ctx, chatBotHandler)
 	log.Println("Chat bot started!")
 
