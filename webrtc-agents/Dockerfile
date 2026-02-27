@@ -17,8 +17,6 @@ RUN dpkg --add-architecture ${TARGETARCH} && apt-get update -y && DEBIAN_FRONTEN
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# gcc-14-multilib-x86-64-linux-gnu \
-
 WORKDIR /build
 
 # Copy go.mod and go.sum files first for better layer caching
