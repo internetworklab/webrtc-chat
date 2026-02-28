@@ -291,10 +291,14 @@ function useWs(
                     remoteNodeId,
                     answerOffer,
                   );
-                  entry.peerConnection.setLocalDescription(answerOffer);
+                  return entry.peerConnection.setLocalDescription(answerOffer);
+                })
+                .then(() => {
                   const answerPayload: SDPOfferPayload = {
                     type: OfferType.Answer,
-                    offer_json: JSON.stringify(answerOffer),
+                    offer_json: JSON.stringify(
+                      entry.peerConnection.localDescription,
+                    ),
                     from_node_id: nodeIdRef.current,
                     to_node_id: remoteNodeId,
                   };
@@ -325,7 +329,15 @@ function useWs(
                 remoteNodeId,
               );
               for (const queuedICEOffer of entry.queuedICEOffers) {
-                entry.peerConnection.addIceCandidate(queuedICEOffer);
+                entry.peerConnection
+                  .addIceCandidate(queuedICEOffer)
+                  .catch((e) => {
+                    console.error(
+                      "failed to add queued ICE candidate to peer connection",
+                      remoteNodeId,
+                      e,
+                    );
+                  });
               }
               entry.queuedICEOffers = [];
             }
@@ -366,15 +378,17 @@ function useWs(
           );
           try {
             const offer = JSON.parse(msg.ice_offer.offer_json);
-            connTrackRef.current[remoteNodeId].peerConnection.addIceCandidate(
-              offer,
-            );
+            connTrackRef.current[remoteNodeId].peerConnection
+              .addIceCandidate(offer)
+              .catch((e) => {
+                console.error(
+                  "failed to add ICE candidate to peer connection",
+                  remoteNodeId,
+                  e,
+                );
+              });
           } catch (e) {
-            console.log(
-              "failed to add ICE offer to peer connection",
-              remoteNodeId,
-              e,
-            );
+            console.log("failed to parse remote ICE offer JSON", e);
           }
         }
       } catch (e) {
@@ -878,16 +892,18 @@ function attachPeerConnectionEventListeners(
               remoteNodeId,
               offer,
             );
+            return peerConnection.setLocalDescription(offer);
+          })
+          .then(() => {
             const offerPayload: SDPOfferPayload = {
               type: OfferType.Offer,
-              offer_json: JSON.stringify(offer),
+              offer_json: JSON.stringify(peerConnection.localDescription),
               from_node_id: nodeIdRef.current,
               to_node_id: remoteNodeId,
             };
             const offerMsg: MessagePayload = {
               sdp_offer: offerPayload,
             };
-            peerConnection.setLocalDescription(offer);
             wsRef.current?.send(JSON.stringify(offerMsg));
           })
           .catch((e) => {
@@ -1332,19 +1348,21 @@ function createAndSendOffer(
   localNodeId: string,
   remoteNodeId: string,
 ) {
-  return pc.createOffer().then((offer) => {
-    const offerPayload: SDPOfferPayload = {
-      type: OfferType.Offer,
-      offer_json: JSON.stringify(offer),
-      from_node_id: localNodeId,
-      to_node_id: remoteNodeId,
-    };
-    const offerMsg: MessagePayload = {
-      sdp_offer: offerPayload,
-    };
-    pc.setLocalDescription(offer);
-    wsRef.current?.send(JSON.stringify(offerMsg));
-  });
+  return pc
+    .createOffer()
+    .then((offer) => pc.setLocalDescription(offer))
+    .then(() => {
+      const offerPayload: SDPOfferPayload = {
+        type: OfferType.Offer,
+        offer_json: JSON.stringify(pc.localDescription),
+        from_node_id: localNodeId,
+        to_node_id: remoteNodeId,
+      };
+      const offerMsg: MessagePayload = {
+        sdp_offer: offerPayload,
+      };
+      wsRef.current?.send(JSON.stringify(offerMsg));
+    });
 }
 
 function determineFollowingMode(msgsBox: HTMLDivElement) {
