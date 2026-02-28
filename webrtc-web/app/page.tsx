@@ -107,7 +107,6 @@ function useWs(
   const pingTimerRef = useRef<NodeJS.Timeout | undefined>(undefined);
   const [conns, setConns] = useState<ConnEntry[]>([]);
   const connTrackRef = useRef<ConnTrack>({});
-  const serverRef=useRef<WSServer|null>(null)
 
   const doRefresh = (apiPrefix: string) =>
     getConns(apiPrefix).then((conns) => {
@@ -200,24 +199,24 @@ function useWs(
             }
 
             if (echo.seq_id === 0) {
-              getConns().then((conns) => {
+              getConns(server.apiPrefix).then((conns) => {
                 setConns(conns);
               });
             }
           }
         }
         if (msg.online) {
-          doRefresh();
+          doRefresh(server.apiPrefix);
         }
         if (msg.register) {
           if (msg.node_id) {
             setNodeId(msg.node_id);
             nodeIdRef.current = msg.node_id;
           }
-          doRefresh();
+          doRefresh(server.apiPrefix);
         }
         if (msg.rename) {
-          doRefresh();
+          doRefresh(server.apiPrefix);
         }
         if (msg.sdp_offer && msg.sdp_offer.to_node_id === nodeIdRef.current) {
           console.log(
@@ -1838,7 +1837,7 @@ export default function Home() {
                     );
                     if (server) {
                       doConnect(
-                        server.url,
+                        server,
                         server.iceServers,
                         addUnreadMessageIds,
                         preference,
