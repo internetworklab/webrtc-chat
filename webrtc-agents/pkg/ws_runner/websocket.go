@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/http"
 	"net/url"
 
 	"time"
@@ -28,6 +29,68 @@ type WebSocketRunner struct {
 	NodeName              string
 	TLSConfig             *tls.Config
 	Resolver              *net.Resolver
+	PreferIPv6            bool
+}
+
+func (runner *WebSocketRunner) getDialer() *websocket.Dialer {
+	dialer := &websocket.Dialer{
+		Proxy:            http.ProxyFromEnvironment,
+		HandshakeTimeout: 45 * time.Second,
+	}
+
+	dialer.NetDialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		host, port, err := net.SplitHostPort(addr)
+		if err != nil {
+			return nil, err
+		}
+
+		resolver := net.DefaultResolver
+		if runner.Resolver != nil {
+			resolver = runner.Resolver
+		}
+
+		// Use the custom resolver to lookup IP addresses
+		nwPreference := "ip"
+		if runner.PreferIPv6 {
+			nwPreference = "ip6"
+		}
+		ips, err := resolver.LookupIP(ctx, nwPreference, host)
+		if err != nil {
+			return nil, err
+		}
+
+		// Filter for IPv6 only if PreferIPv6 is set
+		var filteredIPs []net.IP
+		if runner.PreferIPv6 {
+			for _, ip := range ips {
+				if ip.To4() == nil { // IPv6 address (not IPv4-mapped)
+					filteredIPs = append(filteredIPs, ip)
+				}
+			}
+		} else {
+			filteredIPs = ips
+		}
+
+		// Try connecting to each resolved IP until one succeeds
+		var lastErr error
+		for _, ip := range filteredIPs {
+			ipAddr := net.JoinHostPort(ip.String(), port)
+			conn, err := (&net.Dialer{}).DialContext(ctx, network, ipAddr)
+			if err == nil {
+				return conn, nil
+			}
+			lastErr = err
+		}
+
+		return nil, fmt.Errorf("failed to connect to %s: %v", addr, lastErr)
+	}
+
+	// Check if the URL scheme is wss (WebSocket Secure) and set TLS config
+	if runner.URL.Scheme == "wss" && runner.TLSConfig != nil {
+		dialer.TLSClientConfig = runner.TLSConfig
+	}
+
+	return dialer
 }
 
 func (runner *WebSocketRunner) Run(ctx context.Context, handler pkghandlers.GenericWebRTCHandler) {
@@ -40,7 +103,8 @@ func (runner *WebSocketRunner) Run(ctx context.Context, handler pkghandlers.Gene
 			log.Printf("Connecting to %s", u.String())
 
 			// Establish WebSocket connection
-			wsConn, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+
+			wsConn, _, err := runner.getDialer().Dial(u.String(), nil)
 			if err != nil {
 				log.Fatal("Failed to dial:", err)
 			}

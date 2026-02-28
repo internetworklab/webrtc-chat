@@ -27,3 +27,4 @@ services:
       - "--openrouter-apikey-env=OPENROUTER_APIKEY"
       - "--custom-resolver=[fd42:d42:d42:54::1]:53"
       - "--custom-ca=/custom-ca/dn42-ca.crt"
+      - "--prefer-ipv6=true"

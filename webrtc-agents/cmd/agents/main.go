@@ -33,6 +33,7 @@ type CLI struct {
 	OpenRouterAPIKeyEnv   string        `name:"openrouter-apikey-env" help:"Environment variable name that stores the OpenRouter API key" default:"OPENROUTER_APIKEY"`
 	ChatBotModel          string        `name:"chatbot-model" help:"The id of the model use for chatbot"`
 	CustomResolver        string        `name:"custom-resolver" help:"Use specified resolver instead of system's default resolver, example like [fd42:d42:d42:54::1]:53 or 172.20.0.53"`
+	PreferIPv6            bool          `name:"prefer-ipv6" help:"Use IPv6-only"`
 }
 
 func (cli *CLI) getCustomResolver() *net.Resolver {
@@ -128,6 +129,7 @@ func main() {
 			NodeName:              nodeName,
 			Resolver:              resolverUsed,
 			TLSConfig:             tlsConfig,
+			PreferIPv6:            cli.PreferIPv6,
 		}
 	}
 
