@@ -18,3 +18,8 @@ services:
       - dn42-webrtc-agents
     command:
       - "--chatbot-model=deepseek/deepseek-v3.2"
+      - "--ws-server=wss://chat.duststars.dn42/api/ws"
+      - "--ice-server=stun:webrtc-stun.duststars.dn42:3478"
+      - "--reconnect-on-disconnect"
+      - "--reconnect-delay=3s"
+      - "--openrouter-apikey-env=OPENROUTER_APIKEY"
