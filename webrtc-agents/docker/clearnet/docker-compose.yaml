@@ -1,0 +1,20 @@
+name: webrtc-agents
+networks:
+  webrtc-agents:
+    name: "webrtc-agents"
+    driver: bridge
+    enable_ipv4: false
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: ${RFC5375_RANDOMIZED_ULA}
+services:
+  webrtc-agents:
+    container_name: "webrtc-agents"
+    image: webrtc-agents:latest
+    pull_policy: never
+    restart: unless-stopped
+    networks:
+      - webrtc-agents
+    command:
+      - "--chatbot-model=deepseek/deepseek-v3.2"

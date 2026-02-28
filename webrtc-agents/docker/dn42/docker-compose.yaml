@@ -1,0 +1,20 @@
+name: dn42-webrtc-agents
+networks:
+  dn42-webrtc-agents:
+    name: "dn42-webrtc-agents"
+    driver: bridge
+    enable_ipv4: false
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: ${RFC5375_RANDOMIZED_ULA}
+services:
+  webrtc-agents:
+    container_name: "dn42-webrtc-agents"
+    image: webrtc-agents:latest
+    pull_policy: never
+    restart: unless-stopped
+    networks:
+      - dn42-webrtc-agents
+    command:
+      - "--chatbot-model=deepseek/deepseek-v3.2"

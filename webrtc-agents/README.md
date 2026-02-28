@@ -22,7 +22,7 @@ To build this multi-arch image, use the following commands from the `webrtc-demo
 
 ```bash
 # Build and push multi-arch image  
-docker buildx build --target builder \
+docker buildx build \
  --platform linux/arm64 --platform linux/amd64 \
  --file webrtc-agents/Dockerfile \
  --tag yourrepo.com/username/webrtc-agents:latest \
@@ -30,7 +30,7 @@ docker buildx build --target builder \
  .
 
 # Or build for local testing (single arch)
-docker buildx build --target builder \
+docker buildx build \
  --platform linux/arm64 --platform linux/amd64 \
  --file webrtc-agents/Dockerfile \
  --tag webrtc-agents:latest \

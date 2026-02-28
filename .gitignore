@@ -2,3 +2,9 @@
 webrtc-agents/test.ogg
 webrtc-agents/.env
 webrtc-agents/.env.test
+webrtc-agents/docker/clearnet/.env
+webrtc-agents/docker/dn42/.env
+webrtc-agents/docker/clearnet/.env.test
+webrtc-agents/docker/dn42/.env.test
+webrtc-agents/docker/clearnet/.env.*
+webrtc-agents/docker/dn42/.env.*
