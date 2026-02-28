@@ -1,7 +1,7 @@
-const googleStunServer = "stun:stun.l.google.com:19302";
-
-const defaultInternetICEServers: string[] = [googleStunServer];
-const defaultDN42ICEServers: string[] = [];
+const defaultInternetICEServers: string[] = ["stun:stun.l.google.com:19302"];
+const defaultDN42ICEServers: string[] = [
+  "stun:webrtc-stun.duststars.dn42:3478",
+];
 
 /**
  * Get comma-separated strings from an environment variable or return defaults.

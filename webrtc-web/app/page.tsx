@@ -999,8 +999,6 @@ function getUserPreferenceMap(conns: ConnEntry[]): Record<string, Preference> {
   return userPreferenceMap;
 }
 
-const servers: WSServer[] = getSignallingServers();
-
 // onAck will always get called, regardless of whether there is an error or timeout.
 function listenForAck(
   dc: RTCDataChannel,
@@ -1577,7 +1575,11 @@ export default function Home() {
   };
 
   const userPreferenceMap = getUserPreferenceMap(conns ?? []);
-  const [selectedServer, setSelectedServer] = useState<string>(servers[0].id);
+  const servers: WSServer[] = getSignallingServers();
+  // console.debug("[dbg] servers:", servers);
+  const [selectedServer, setSelectedServer] = useState<string>(
+    servers?.[0].id ?? "",
+  );
   const [searchKw, setSearchKw] = useState<string>("");
 
   const msgsBoxRef = useRef<HTMLDivElement>(null);
