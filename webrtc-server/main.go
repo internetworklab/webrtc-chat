@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"slices"
 	"time"
 
 	pkgconnreg "example.com/webrtcserver/pkg/connreg"
@@ -15,7 +16,7 @@ import (
 
 type CLI struct {
 	ListenAddr                string        `name:"listen-addr" help:"Address to listen on" default:":3001"`
-	WsTimeout                 time.Duration `name:"ws-timeout" help:"WebSocket timeout duration" default:"10s"`
+	WsTimeout                 time.Duration `name:"ws-timeout" help:"WebSocket timeout duration" default:"30s"`
 	WsPath                    string        `name:"ws-path" help:"WebSocket path" default:"/ws"`
 	AllowedOrigins            []string      `name:"allowed-origin" help:"Allowed origins for CORS (may be specified multiple times)"`
 	DefaultCorsAllowed        bool          `name:"default-cors-allowed" help:"Allow requests with absent Origin header" default:"true"`
@@ -29,12 +30,7 @@ var cli CLI
 func (c *CLI) getOriginValidator() func(r *http.Request) bool {
 	return func(r *http.Request) bool {
 		if origin := r.Header.Get("Origin"); origin != "" {
-			for _, allowed := range c.AllowedOrigins {
-				if origin == allowed {
-					return true
-				}
-			}
-			return false
+			return slices.Contains(c.AllowedOrigins, origin)
 		}
 		return c.DefaultCorsAllowed
 	}

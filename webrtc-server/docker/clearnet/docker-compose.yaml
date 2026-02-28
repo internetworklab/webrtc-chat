@@ -1,0 +1,18 @@
+name: webrtc-server
+networks:
+  webrtc-server:
+    name: "webrtc-server"
+    driver: bridge
+    enable_ipv4: false
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: ${RFC5375_RANDOMIZED_ULA}
+services:
+  webrtc-server:
+    container_name: "webrtc-server"
+    image: webrtc-server:latest
+    pull_policy: never
+    restart: unless-stopped
+    networks:
+      - webrtc-server
