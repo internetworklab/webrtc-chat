@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"log"
+	"net"
 	"net/url"
 	"os"
 	"os/signal"
@@ -18,20 +21,91 @@ import (
 	"github.com/pion/webrtc/v4"
 )
 
-var cli struct {
+type CLI struct {
 	WsServer              string        `name:"ws-server" help:"WebSocket server URL" default:"ws://localhost:3001/ws"`
 	PingPeriod            time.Duration `name:"ping-period-seconds" help:"Ping period in seconds" default:"3s"`
 	Debug                 bool          `name:"debug" help:"Show ping/pong messages in logs for debugging purposes"`
 	ICEServer             []string      `name:"ice-server" help:"To specify the ICE servers, might be specify multiple times" default:"stun:stun.l.google.com:19302"`
+	CustomCA              []string      `name:"custom-ca" help:"Custom CA certificates to trust (the --custom-ca= argument can appear multiple times)"`
 	ReconnectOnDisconnect bool          `name:"reconnect-on-disconnect" help:"Reconnect on WebSocket disconnect"`
 	ReconnectDelay        time.Duration `name:"reconnect-delay" help:"Delay between reconnect attempts" default:"3s"`
 	OggFiles              []string      `name:"ogg-file" help:"OGG files to load as audio tracks (must be 48kHz stereo)" placeholder:"FILE.ogg"`
 	OpenRouterAPIKeyEnv   string        `name:"openrouter-apikey-env" help:"Environment variable name that stores the OpenRouter API key" default:"OPENROUTER_APIKEY"`
 	ChatBotModel          string        `name:"chatbot-model" help:"The id of the model use for chatbot"`
+	CustomResolver        string        `name:"custom-resolver" help:"Use specified resolver instead of system's default resolver, example like [fd42:d42:d42:54::1]:53 or 172.20.0.53"`
 }
+
+func (cli *CLI) getCustomResolver() *net.Resolver {
+	if cli.CustomResolver == "" {
+		return nil
+	}
+
+	var resolverAddr string
+
+	// Try to split host and port first
+	host, port, err := net.SplitHostPort(cli.CustomResolver)
+	if err != nil {
+		// No port specified, use default DNS port 53
+		resolverAddr = net.JoinHostPort(cli.CustomResolver, "53")
+	} else {
+		// Port was specified
+		resolverAddr = net.JoinHostPort(host, port)
+	}
+
+	return &net.Resolver{
+		PreferGo: true,
+		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+			d := net.Dialer{}
+			return d.DialContext(ctx, network, resolverAddr)
+		},
+	}
+}
+
+func (cli *CLI) getTLSConfig() *tls.Config {
+	if len(cli.CustomCA) == 0 {
+		return nil
+	}
+
+	logger := log.New(os.Stderr, "", 0)
+
+	var certPool *x509.CertPool
+	// Get system cert pool as base (to trust both system and custom CAs)
+	sysCertPool, err := x509.SystemCertPool()
+	if err != nil {
+		logger.Printf("Warning: Failed to get system cert pool: %v", err)
+		// If we can't get system cert pool, create a new empty one
+		certPool = x509.NewCertPool()
+	} else {
+		certPool = sysCertPool
+	}
+
+	// Append custom CA certificates to the pool
+	for _, certFile := range cli.CustomCA {
+		certData, err := os.ReadFile(certFile)
+		if err != nil {
+			logger.Printf("Warning: Failed to read custom CA certificate %s: %v", certFile, err)
+			continue
+		}
+		if !certPool.AppendCertsFromPEM(certData) {
+			logger.Printf("Warning: Failed to parse custom CA certificate %s", certFile)
+		}
+	}
+
+	return &tls.Config{
+		RootCAs: certPool,
+	}
+}
+
+var cli CLI
 
 func main() {
 	kong.Parse(&cli)
+	var resolverUsed *net.Resolver = net.DefaultResolver
+	if resolver := cli.getCustomResolver(); resolver != nil {
+		resolverUsed = resolver
+	}
+
+	var tlsConfig *tls.Config = cli.getTLSConfig()
 
 	// Load .env file if it exists (ignore error if file doesn't exist)
 	if err := godotenv.Load(); err != nil {
@@ -52,6 +126,8 @@ func main() {
 			ReconnectOnDisconnect: cli.ReconnectOnDisconnect,
 			ReconnectDelay:        cli.ReconnectDelay,
 			NodeName:              nodeName,
+			Resolver:              resolverUsed,
+			TLSConfig:             tlsConfig,
 		}
 	}
 

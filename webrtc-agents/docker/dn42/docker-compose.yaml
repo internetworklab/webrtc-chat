@@ -16,6 +16,8 @@ services:
     restart: unless-stopped
     networks:
       - dn42-webrtc-agents
+    volumes:
+      - "./custom-ca:/custom-ca:ro"
     command:
       - "--chatbot-model=deepseek/deepseek-v3.2"
       - "--ws-server=wss://chat.duststars.dn42/api/ws"
@@ -23,3 +25,5 @@ services:
       - "--reconnect-on-disconnect"
       - "--reconnect-delay=3s"
       - "--openrouter-apikey-env=OPENROUTER_APIKEY"
+      - "--custom-resolver=[fd42:d42:d42:54::1]:53"
+      - "--custom-ca=/custom-ca/dn42-ca.crt"

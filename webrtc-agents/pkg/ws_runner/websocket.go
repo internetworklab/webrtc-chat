@@ -2,8 +2,10 @@ package ws_runner
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"log"
+	"net"
 	"net/url"
 
 	"time"
@@ -24,6 +26,8 @@ type WebSocketRunner struct {
 	PingIntv              time.Duration
 	Debug                 bool
 	NodeName              string
+	TLSConfig             *tls.Config
+	Resolver              *net.Resolver
 }
 
 func (runner *WebSocketRunner) Run(ctx context.Context, handler pkghandlers.GenericWebRTCHandler) {
