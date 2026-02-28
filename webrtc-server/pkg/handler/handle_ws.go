@@ -188,15 +188,17 @@ func (h *WebsocketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
+		// Create ONE proxy per connection, not per message.
+		// This ensures only one goroutine writes to the websocket connection.
+		connProxy := ws_proxy.NewWebsocketWriteProxy(conn)
+		connProxy.Run(ctx)
+
 		for {
 			msgType, msg, err := conn.ReadMessage()
 			if err != nil {
 				connErrCh <- fmt.Errorf("failed to read message from %s: %v", remoteKey, err)
 				break
 			}
-
-			connProxy := ws_proxy.NewWebsocketWriteProxy(conn)
-			connProxy.Run(ctx)
 
 			switch msgType {
 			case websocket.TextMessage:
