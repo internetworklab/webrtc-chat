@@ -18,6 +18,8 @@ services:
       - dn42-webrtc-agents
     volumes:
       - "./custom-ca:/custom-ca:ro"
+      - "./.env:/app/.env:ro"
+    working_dir: /app
     command:
       - "--chatbot-model=deepseek/deepseek-v3.2"
       - "--ws-server=wss://chat.duststars.dn42/api/ws"
