@@ -66,6 +66,14 @@ import { useScrollTop } from "@/apis/scrollTop";
 import { unmarshalMessagePatchOrder } from "@/apis/message_patch";
 import { getICEServerURLs } from "@/apis/ice";
 import { getSignallingServers } from "@/apis/ws";
+import { ServerSelector } from "@/components/ServerSelector";
+import { useFileDrop } from "@/components/useFileDrop";
+import {
+  createPingStreamFromDC,
+  handleWsEcho,
+  PingRTTSample,
+  setupWsPing,
+} from "@/apis/ping";
 
 const pingTimeoutMs = 3000;
 const pingIntvMs = 1000;
@@ -74,6 +82,7 @@ const defaultMsgTimeoutMs = 3000;
 const defaultFileDCBufferAmountThreshold = 4 * 1024 * 1024;
 
 function makeConnTrackEntry(iceServers: string[]): ConnTrackEntry {
+  console.debug("[dbg] making RTCPeerConnection, iceServers:", iceServers);
   return {
     peerConnection: new RTCPeerConnection({
       iceServers: [{ urls: iceServers }],
@@ -123,6 +132,7 @@ function useWs(
     setConnecting(true);
     const ws = new WebSocket(addr);
     wsRef.current = ws;
+    const logSource = "acceptor";
 
     ws.onopen = () => {
       connectedAtRef.current = Date.now();
@@ -143,28 +153,18 @@ function useWs(
       };
       ws.send(JSON.stringify(registerMsg));
 
-      pingTimerRef.current = setInterval(() => {
-        const seq = seqRef.current ?? 0;
-        const echoMsg: MessagePayload = {
-          echo: {
-            direction: EchoDirectionC2S,
-            correlation_id: correlationId,
-            server_timestamp: 0,
-            timestamp: Date.now(),
-            seq_id: seq,
-          },
-        };
-        const nextSeq = seq + 1;
-        seqRef.current = nextSeq;
-        pingTxMapRef.current[seq.toString()] = Date.now();
-        ws.send(JSON.stringify(echoMsg));
-      }, pingIntvMs);
+      pingTimerRef.current = setupWsPing(
+        pingIntvMs,
+        ws,
+        pingTxMapRef,
+        correlationId,
+      );
     };
     const cleanUp = () => {
       setConnected(false);
       setConnecting(false);
       setConns([]);
-      if (pingTimerRef.current) {
+      if (pingTimerRef.current !== null && pingTimerRef.current !== undefined) {
         clearInterval(pingTimerRef.current);
         pingTimerRef.current = undefined;
       }
@@ -176,35 +176,25 @@ function useWs(
       cleanUp();
     };
     ws.onerror = (error) => {
-      console.error("[dbg] ws error", error);
-      cleanUp();
+      console.error(`[dbg] [${logSource}] ws error`, error);
     };
     ws.onmessage = (event) => {
-      const logSource = "acceptor";
       try {
         const msg: MessagePayload = JSON.parse(event.data);
-        const echo = msg.echo;
-        if (echo && echo.direction === EchoDirectionS2C) {
-          const now = Date.now();
-          const t0 = pingTxMapRef.current[echo.seq_id.toString()];
-          if (t0 !== undefined) {
-            const rtt = now - t0;
-            setRtt(rtt);
-            setLastSeq(echo.seq_id);
-
+        if (msg.echo) {
+          handleWsEcho(msg.echo, correlationId, pingTxMapRef, (rttMs, seq) => {
+            setRtt(rttMs);
+            setLastSeq(seq);
             const connectedAt = connectedAtRef.current;
-            if (connectedAt !== undefined) {
-              const upTime = now - (connectedAt ?? 0);
-              setUpTime(upTime);
+            if (connectedAt !== undefined && connectedAt !== null) {
+              setUpTime(new Date().valueOf() - connectedAt);
             }
-
-            if (echo.seq_id === 0) {
-              getConns(server.apiPrefix).then((conns) => {
-                setConns(conns);
-              });
+            if (seq == 0) {
+              doRefresh(server.apiPrefix);
             }
-          }
+          });
         }
+
         if (msg.online) {
           doRefresh(server.apiPrefix);
         }
@@ -220,7 +210,7 @@ function useWs(
         }
         if (msg.sdp_offer && msg.sdp_offer.to_node_id === nodeIdRef.current) {
           console.log(
-            `[dbg]${logSource} got SDP offer of type`,
+            `[dbg] [${logSource}] got SDP offer of type`,
             msg.sdp_offer.type,
             "from remote peer",
             msg.sdp_offer,
@@ -287,7 +277,7 @@ function useWs(
                 .createAnswer()
                 .then((answerOffer) => {
                   console.log(
-                    "[dbg] offer of type answer successfully created for remote peer",
+                    `[dbg] [${logSource}] offer of type answer successfully created for remote peer`,
                     remoteNodeId,
                     answerOffer,
                   );
@@ -310,15 +300,15 @@ function useWs(
                     wsConn.send(JSON.stringify(answerMsg));
                   } else {
                     console.error(
-                      "failed to reply SDP offer to remote peer",
+                      `[${logSource}] failed to reply SDP offer to remote peer`,
                       remoteNodeId,
                       "because ws connection is not established",
                     );
                   }
                 })
                 .catch((e) =>
-                  console.log(
-                    "failed to create answer for SDP offer from remote peer",
+                  console.error(
+                    `[${logSource}] failed to create answer for SDP offer from remote peer`,
                     e,
                   ),
                 );
@@ -333,7 +323,7 @@ function useWs(
                   .addIceCandidate(queuedICEOffer)
                   .catch((e) => {
                     console.error(
-                      "failed to add queued ICE candidate to peer connection",
+                      `[${logSource}] failed to add queued ICE candidate to peer connection`,
                       remoteNodeId,
                       e,
                     );
@@ -342,16 +332,22 @@ function useWs(
               entry.queuedICEOffers = [];
             }
           } catch (e) {
-            console.log("failed to handle remote SDP offer", e);
+            console.error(
+              `[${logSource}] failed to handle remote SDP offer`,
+              e,
+            );
           }
         }
         if (msg.ice_offer && msg.ice_offer.to_node_id === nodeIdRef.current) {
-          console.log("[dbg] got ICE offer from remote peer", msg.ice_offer);
+          console.log(
+            `[dbg] [${logSource}] got ICE offer from remote peer`,
+            msg.ice_offer,
+          );
           const remoteNodeId = msg.ice_offer.from_node_id;
           if (!(remoteNodeId in connTrackRef.current)) {
             // implies that the ICE offer is arrived too early, or we didn't prepared for that.
             console.error(
-              "got ICE offer from remote peer",
+              `[${logSource}] got ICE offer from remote peer`,
               remoteNodeId,
               "but no conn track entry found",
             );
@@ -363,17 +359,23 @@ function useWs(
               const offer = JSON.parse(msg.ice_offer.offer_json);
               connTrackRef.current[remoteNodeId].queuedICEOffers.push(offer);
             } catch (e) {
-              console.log("failed to parse remote ICE offer", e);
+              console.error(
+                `[${logSource}] failed to parse remote ICE offer`,
+                e,
+              );
             }
+
             console.log(
-              "[dbg] ice offer from remote peer",
+              `[dbg] [${logSource}] ice offer from remote peer`,
               remoteNodeId,
               "is queued",
+              "queue:",
+              connTrackRef.current?.[remoteNodeId]?.queuedICEOffers,
             );
             return;
           }
           console.log(
-            "[dbg] adding ICE offer to peer connection",
+            `[dbg] [${logSource}] adding ICE offer to peer connection`,
             remoteNodeId,
           );
           try {
@@ -382,17 +384,20 @@ function useWs(
               .addIceCandidate(offer)
               .catch((e) => {
                 console.error(
-                  "failed to add ICE candidate to peer connection",
+                  `[${logSource}] failed to add ICE candidate to peer connection`,
                   remoteNodeId,
                   e,
                 );
               });
           } catch (e) {
-            console.log("failed to parse remote ICE offer JSON", e);
+            console.log(
+              `[${logSource}] failed to parse remote ICE offer JSON`,
+              e,
+            );
           }
         }
       } catch (e) {
-        console.error("Failed to handle ws message", e);
+        console.error(`[${logSource}] Failed to handle ws message`, e);
       }
     };
   };
@@ -984,6 +989,48 @@ function attachPeerConnectionEventListeners(
       };
     });
   };
+
+  // Handle renegotiation - triggered when tracks are added/removed or other session changes
+  peerConnection.onnegotiationneeded = async () => {
+    console.log(
+      `[dbg]${logSource} Negotiation needed for peer`,
+      remoteNodeId,
+      "starting renegotiation",
+    );
+
+    try {
+      // Set a flag to indicate we're in the process of negotiating
+      setConnTrackStatus((prev) => ({
+        ...prev,
+        [remoteNodeId]: {
+          ...prev[remoteNodeId],
+          negotiating: true,
+        },
+      }));
+
+      await createAndSendOffer(
+        peerConnection,
+        wsRef,
+        nodeIdRef.current,
+        remoteNodeId,
+        logSource,
+      );
+    } catch (e) {
+      console.error(
+        `[dbg]${logSource} Renegotiation failed for peer`,
+        remoteNodeId,
+        e,
+      );
+    } finally {
+      setConnTrackStatus((prev) => ({
+        ...prev,
+        [remoteNodeId]: {
+          ...prev[remoteNodeId],
+          negotiating: false,
+        },
+      }));
+    }
+  };
 }
 
 function tryParseInt(s: string): number {
@@ -1347,11 +1394,15 @@ function createAndSendOffer(
   wsRef: RefObject<WebSocket | null>,
   localNodeId: string,
   remoteNodeId: string,
+  logSource: string = "",
 ) {
   return pc
     .createOffer()
     .then((offer) => pc.setLocalDescription(offer))
     .then(() => {
+      if (wsRef.current?.readyState !== WebSocket.OPEN) {
+        throw new Error("WebSocket not connected");
+      }
       const offerPayload: SDPOfferPayload = {
         type: OfferType.Offer,
         offer_json: JSON.stringify(pc.localDescription),
@@ -1361,7 +1412,15 @@ function createAndSendOffer(
       const offerMsg: MessagePayload = {
         sdp_offer: offerPayload,
       };
-      wsRef.current?.send(JSON.stringify(offerMsg));
+      wsRef.current.send(JSON.stringify(offerMsg));
+      console.log(`[dbg]${logSource} SDP offer sent to peer`, remoteNodeId);
+    })
+    .catch((err) => {
+      console.error(
+        `[dbg]${logSource} Failed to create and send SDP offer:`,
+        err,
+      );
+      throw err; // Re-throw so caller can handle
     });
 }
 
@@ -1434,6 +1493,35 @@ export default function Home() {
         PredefinedDCLabel.Chat,
       );
 
+      ent.pingDC = ent.peerConnection.createDataChannel(PredefinedDCLabel.Ping);
+      const pingSampleStream = createPingStreamFromDC(
+        ent.pingDC,
+        nodeIdRef.current,
+        remoteNodeId,
+        pingTimeoutMs,
+      );
+
+      const reader = pingSampleStream.getReader();
+      const doRead = (
+        streamDataEv: ReadableStreamReadResult<PingRTTSample>,
+      ) => {
+        if (streamDataEv.done) {
+          return;
+        }
+        const value = streamDataEv.value;
+        if (value) {
+          setConnTrackStatus((prev) => ({
+            ...prev,
+            [remoteNodeId]: {
+              ...prev[remoteNodeId],
+              rtt: value.rttMs,
+            },
+          }));
+        }
+        reader.read().then(doRead);
+      };
+      reader.read().then(doRead);
+
       attachDCEventListeners(
         ent.dataChannel,
         setConnTrackStatus,
@@ -1455,91 +1543,6 @@ export default function Home() {
           e,
         );
       });
-    }
-
-    if (ent && (ent.pingSeqRef === undefined || ent.pingSeqRef === null)) {
-      const pingDC = ent.peerConnection.createDataChannel(
-        PredefinedDCLabel.Ping,
-      );
-      pingDC.onerror = (ev) => {
-        console.error(`[dbg] [${logSource}] ping data channel error`, ev);
-      };
-      pingDC.onclose = () => {
-        if (ent.pingSeqRef) {
-          if (
-            ent.pingSeqRef.timer !== undefined &&
-            ent.pingSeqRef.timer !== null
-          ) {
-            clearInterval(ent.pingSeqRef.timer);
-            ent.pingSeqRef.timer = undefined;
-          }
-          ent.pingSeqRef = undefined;
-          setConnTrackStatus((prev) => ({
-            ...prev,
-            [remoteNodeId]: {
-              ...prev[remoteNodeId],
-              rtt: undefined,
-            },
-          }));
-        }
-      };
-
-      pingDC.onmessage = (ev) => {
-        try {
-          const msgObject: ChatMessage = JSON.parse(ev.data);
-          if (
-            msgObject.ping &&
-            msgObject.ping.direction === ChatMessagePingDirection.Pong
-          ) {
-            const seq = msgObject.ping.seq;
-            if (seq !== undefined && seq !== null) {
-              const txTime = ent.pingSeqRef?.txMap[seq];
-              if (txTime !== undefined && txTime !== null) {
-                const rtt = Date.now() - txTime;
-                delete ent.pingSeqRef?.txMap[seq];
-                setConnTrackStatus((prev) => ({
-                  ...prev,
-                  [remoteNodeId]: {
-                    ...prev[remoteNodeId],
-                    rtt: rtt,
-                  },
-                }));
-              } else {
-                // timeout, the trace entry has already been deleted
-                // todo: maybe display it properly in the UI ?
-              }
-            }
-          }
-        } catch (e) {
-          console.error("failed to parse ping data channel message", e);
-        }
-      };
-      const pingSeqRef: PingStateRef = { seq: 0, txMap: {} };
-      ent.pingSeqRef = pingSeqRef;
-      pingDC.onopen = () => {
-        pingSeqRef.timer = setInterval(() => {
-          const pingPayload: ChatMessagePing = {
-            direction: ChatMessagePingDirection.Ping,
-            seq: pingSeqRef.seq,
-          };
-          pingSeqRef.seq++;
-          const pingMsg: ChatMessage = {
-            messageId: crypto.randomUUID(),
-            timestamp: Date.now(),
-            fromNodeId: nodeIdRef.current,
-            toNodeId: remoteNodeId,
-            ping: pingPayload,
-          };
-          pingSeqRef.txMap[pingPayload.seq] = Date.now();
-          pingDC.send(JSON.stringify(pingMsg));
-          const seq = pingPayload.seq;
-          setTimeout(() => {
-            if (seq in pingSeqRef.txMap) {
-              delete pingSeqRef.txMap[seq];
-            }
-          }, pingTimeoutMs);
-        }, 1000);
-      };
     }
   };
 
@@ -1575,7 +1578,7 @@ export default function Home() {
 
   const sendMsgDeleteRequest = (toNodeId: string, deletingMsgId: string) => {
     const msgToSend: ChatMessage = {
-      timestamp: Date.now(),
+      timestamp: new Date().valueOf(),
       fromNodeId: nodeIdRef.current,
       toNodeId: toNodeId,
       messageId: crypto.randomUUID(),
@@ -1608,7 +1611,6 @@ export default function Home() {
     updateUnreadMessageIds,
   } = useUnreads(nodeIdRef);
 
-  // todo: set on/off following mode in certain cases
   const followingModeRef = useRef(false);
 
   // scroll to last message when following mode is on
@@ -1661,7 +1663,65 @@ export default function Home() {
     }
   };
 
-  const [showDropArea, setShowDropArea] = useState(false);
+  const onFileList = (filelist: FileList) => {
+    if (!filelist || filelist.length <= 0) {
+      return;
+    }
+    const fromNodeId = nodeIdRef.current;
+    const toNodeId = activeConn;
+    const pc = connTrackRef.current[activeConn]?.peerConnection;
+    const chatDC = connTrackRef.current[activeConn]?.dataChannel;
+    if (pc && chatDC) {
+      for (const file of filelist) {
+        let fileCat = ChatMessageFileCategory.Image;
+        if (file.type.startsWith("video/")) {
+          fileCat = ChatMessageFileCategory.Video;
+        } else if (file.type.startsWith("image/")) {
+          fileCat = ChatMessageFileCategory.Image;
+        } else {
+          fileCat = ChatMessageFileCategory.File;
+        }
+        if (
+          fileCat === ChatMessageFileCategory.Image ||
+          fileCat === ChatMessageFileCategory.Video
+        ) {
+          createThumbnailFromFile(file)
+            .then((thumbnail) => {
+              transmitFileViaPC(
+                pc,
+                chatDC,
+                fromNodeId,
+                toNodeId,
+                fileCat,
+                file,
+                setConnTrackStatus,
+                thumbnail,
+              );
+            })
+            .catch((e) => {
+              console.error(
+                "failed to create thumbnail for file",
+                file.name,
+                e,
+              );
+            });
+        } else {
+          transmitFileViaPC(
+            pc,
+            chatDC,
+            fromNodeId,
+            toNodeId,
+            fileCat,
+            file,
+            setConnTrackStatus,
+            undefined,
+          );
+        }
+      }
+    }
+  };
+  const { showDropArea, onDrop, onDragOver, onMouseOut } =
+    useFileDrop(onFileList);
 
   return (
     <Fragment>
@@ -1780,95 +1840,24 @@ export default function Home() {
               </Box>
             </Box>
           ) : (
-            <Box
-              sx={{
-                display: "flex",
-                flexDirection: "column",
-                justifyContent: "center",
-                height: "100%",
+            <ServerSelector
+              connecting={connecting}
+              onConnect={(server) => {
+                doConnect(
+                  server,
+                  server.iceServers,
+                  addUnreadMessageIds,
+                  preference,
+                );
               }}
-            >
-              <Box
-                sx={{
-                  display: "grid",
-                  gridTemplateColumns: "auto 1fr",
-                  gap: 1,
-                  rowGap: 2,
-                  alignItems: "center",
-                  padding: 2,
-                }}
-              >
-                <Box sx={{ justifySelf: "right" }}>Choose Server:</Box>
-                <Select
-                  variant="standard"
-                  label="Server"
-                  value={selectedServer}
-                  onChange={(e) => setSelectedServer(e.target.value)}
-                >
-                  {servers.map((server) => (
-                    <MenuItem key={server.id} value={server.id}>
-                      {server.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-                <Box sx={{ justifySelf: "right" }}>Pick a Name:</Box>
-                <TextField
-                  fullWidth
-                  variant="standard"
-                  value={preference.name}
-                  onChange={(e) =>
-                    setPreference({
-                      ...preference,
-                      name: e.target.value,
-                    })
-                  }
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      const server = servers.find(
-                        (server) => server.id === selectedServer,
-                      );
-                      if (server) {
-                        doConnect(
-                          server,
-                          server.iceServers,
-                          addUnreadMessageIds,
-                          preference,
-                        );
-                      }
-                    }
-                  }}
-                />
-              </Box>
-              <Box
-                sx={{
-                  display: "flex",
-                  justifyContent: "center",
-                  marginTop: 2,
-                }}
-              >
-                <Button
-                  variant="contained"
-                  loading={connecting}
-                  onClick={() => {
-                    const server = servers.find(
-                      (server) => server.id === selectedServer,
-                    );
-                    if (server) {
-                      doConnect(
-                        server,
-                        server.iceServers,
-                        addUnreadMessageIds,
-                        preference,
-                      );
-                    }
-                  }}
-                >
-                  Connect
-                </Button>
-              </Box>
-            </Box>
+              preferName={preference.name}
+              onPreferNameChange={(n) => {
+                setPreference((prev) => ({ ...prev, name: n }));
+              }}
+              selectedServer={selectedServer}
+              onSelectedServerChange={(serverId) => setSelectedServer(serverId)}
+              servers={servers}
+            />
           )}
         </LeftPanel>
         {activeConn ? (
@@ -1880,84 +1869,9 @@ export default function Home() {
               flexDirection: "column",
               overflow: "hidden",
             }}
-            onDrop={(ev) => {
-              ev.preventDefault();
-              ev.stopPropagation();
-              console.log(
-                "[dbg] [drop] onDrop:",
-                ev,
-                "at",
-                new Date().valueOf(),
-              );
-              const filelist = ev.dataTransfer?.files;
-              const pc = connTrackRef.current[activeConn]?.peerConnection;
-              const chatDC = connTrackRef.current[activeConn]?.dataChannel;
-              const fromNodeId = nodeIdRef.current;
-              const toNodeId = activeConn;
-              if (filelist && filelist.length > 0 && pc && chatDC) {
-                for (const file of filelist) {
-                  let fileCat = ChatMessageFileCategory.Image;
-                  if (file.type.startsWith("video/")) {
-                    fileCat = ChatMessageFileCategory.Video;
-                  } else if (file.type.startsWith("image/")) {
-                    fileCat = ChatMessageFileCategory.Image;
-                  } else {
-                    fileCat = ChatMessageFileCategory.File;
-                  }
-                  if (
-                    fileCat === ChatMessageFileCategory.Image ||
-                    fileCat === ChatMessageFileCategory.Video
-                  ) {
-                    createThumbnailFromFile(file)
-                      .then((thumbnail) => {
-                        transmitFileViaPC(
-                          pc,
-                          chatDC,
-                          fromNodeId,
-                          toNodeId,
-                          fileCat,
-                          file,
-                          setConnTrackStatus,
-                          thumbnail,
-                        );
-                      })
-                      .catch((e) => {
-                        console.error(
-                          "failed to create thumbnail for file",
-                          file.name,
-                          e,
-                        );
-                      });
-                  } else {
-                    transmitFileViaPC(
-                      pc,
-                      chatDC,
-                      fromNodeId,
-                      toNodeId,
-                      fileCat,
-                      file,
-                      setConnTrackStatus,
-                      undefined,
-                    );
-                  }
-                }
-              }
-              setShowDropArea(false);
-            }}
-            onDragOver={(ev) => {
-              ev.preventDefault();
-              ev.stopPropagation();
-              console.log(
-                "[dbg] [drop] onDragOver:",
-                ev,
-                "at",
-                new Date().valueOf(),
-              );
-              setShowDropArea(true);
-            }}
-            onMouseOut={(ev) => {
-              setShowDropArea(false);
-            }}
+            onDrop={onDrop}
+            onDragOver={onDragOver}
+            onMouseOut={onMouseOut}
           >
             <Paper
               sx={{

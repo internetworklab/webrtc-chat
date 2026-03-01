@@ -249,6 +249,9 @@ export type ConnTrackStatusEntry = {
   // connecting to the remote peer
   connecting?: boolean;
 
+  // renegotiating with the remote peer (SDP offer/answer exchange in progress)
+  negotiating?: boolean;
+
   // messages we sent to the remote peer and vice versa
   messages?: ChatMessage[];
 
@@ -307,7 +310,7 @@ export type ConnTrackEntry = {
   // this is the chat DC
   dataChannel?: RTCDataChannel | null;
 
-  pingSeqRef?: PingStateRef;
+  pingDC?: RTCDataChannel;
 
   audioRef?: AudioConnTrackEntry;
 };

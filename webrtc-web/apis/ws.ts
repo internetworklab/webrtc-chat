@@ -92,7 +92,7 @@ export function getSignallingServers(): WSServer[] {
       url: "ws://localhost:3001/ws",
       name: "Test Server",
       id: "test",
-      iceServers: getICEServerURLs(),
+      iceServers: getDN42ICEServerURLs(),
       apiPrefix: "http://localhost:3001",
     },
     {
