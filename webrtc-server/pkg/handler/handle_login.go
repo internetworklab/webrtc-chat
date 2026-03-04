@@ -35,19 +35,20 @@ type NonceState struct {
 type LoginHandler struct {
 	nonceMap sync.Map
 
-	// If this is empty, we would use default value for it.
+	// If this is empty, we would use default value (5m) for it.
 	NonceLifespan time.Duration
 
 	GithubOAuthClientId  string
 	GithubOAuthAppSecret []byte
 	GithubOAuthRedirURL  string
 
-	// If this is empty, we would use default value for it.
+	// If this is empty, we would use default value (see github docs) for it.
 	GithubOAuthLoginPage string
 
+	// If this is empty, we would use default value ("read:user")) for it.
 	GithubOAuthScope string
 
-	// If this is empty, we would use default value for it.
+	// If this is empty, we would use default value (see github docs) for it.
 	GithubOAuthTokenEndpoint string
 	GithubLoginManager       GithubLoginManager
 }
