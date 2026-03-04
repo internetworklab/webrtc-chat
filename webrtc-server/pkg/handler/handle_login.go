@@ -120,11 +120,15 @@ func (h *LoginHandler) handleStart(w http.ResponseWriter, r *http.Request) {
 	}
 	nonce := h.createNonceFor(sessionId.(string), r.URL.Query().Get(QueryParamCurrentPage))
 	redirURL := h.getGithubOAuthRedirectURL(nonce)
+	if redirURL == "" {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(&ErrResponse{Err: "Failed to determine redir url (internal error)"})
+		return
+	}
 	http.Redirect(w, r, redirURL, http.StatusTemporaryRedirect)
 }
 
 func (h *LoginHandler) handleAuthorizationCode(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprint(w, r.URL.Path)
 	nonce := r.URL.Query().Get("state")
 	ctx := r.Context()
 	if nonce == "" {
@@ -174,6 +178,7 @@ func (h *LoginHandler) handleAuthorizationCode(w http.ResponseWriter, r *http.Re
 		json.NewEncoder(w).Encode(&ErrResponse{Err: fmt.Sprintf("Failed to get token from github: %+v", err)})
 		return
 	}
+	defer resp.Body.Close()
 
 	tokenResp := new(GithubTokenResponse)
 	if err := json.NewDecoder(resp.Body).Decode(tokenResp); err != nil {
