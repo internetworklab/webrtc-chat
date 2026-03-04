@@ -25,6 +25,16 @@ func (h *SessionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// this is a http middleware, it does the following:
 	// 1. check if there is some session associated with request, if there is, set the session identifier to context (key is CtxSessionKey)
 	// 2. otherwise, create a session with request, and set the session identifier of the newly created session to the ctx
+	ctx := r.Context()
+
+	sessionId := h.sess.GetSessionId(ctx, r)
+	if sessionId == "" {
+		sessionId = h.sess.CreateSession(ctx, w, r)
+	}
+
+	ctx = context.WithValue(ctx, CtxSessionKey("sessionId"), sessionId)
+	r = r.WithContext(ctx)
+
 	h.origin.ServeHTTP(w, r)
 }
 
