@@ -15,6 +15,8 @@ import (
 	"github.com/google/uuid"
 )
 
+const QueryParamCurrentPage string = "current_page"
+
 type GithubTokenResponse struct {
 	AccessToken string `json:"access_token"`
 	Scope       string `json:"scope,omitempty"`
@@ -23,6 +25,11 @@ type GithubTokenResponse struct {
 
 type GithubLoginManager interface {
 	Login(ctx context.Context, sessionId string, ghToken GithubTokenResponse) error
+}
+
+type NonceState struct {
+	SessionId   string
+	CurrentPage string
 }
 
 type LoginHandler struct {
@@ -46,9 +53,12 @@ func (h *LoginHandler) getNonceLifespan() time.Duration {
 	return h.NonceLifespan
 }
 
-func (h *LoginHandler) createNonceFor(sessionId string) string {
+func (h *LoginHandler) createNonceFor(sessionId string, currentPage string) string {
 	nonce := uuid.NewString()
-	h.nonceMap.Store(nonce, sessionId)
+	h.nonceMap.Store(nonce, &NonceState{
+		SessionId:   sessionId,
+		CurrentPage: currentPage,
+	})
 	go func() {
 		<-time.After(h.getNonceLifespan())
 		if h != nil {
@@ -60,8 +70,15 @@ func (h *LoginHandler) createNonceFor(sessionId string) string {
 }
 
 func (h *LoginHandler) getSessionIdByNonce(nonce string) string {
-	if sess, ok := h.nonceMap.Load(nonce); ok {
-		return sess.(string)
+	if nonceState, ok := h.nonceMap.Load(nonce); ok && nonceState != nil {
+		return nonceState.(*NonceState).SessionId
+	}
+	return ""
+}
+
+func (h *LoginHandler) getInitialPageByNonce(nonce string) string {
+	if nonceState, ok := h.nonceMap.Load(nonce); ok && nonceState != nil {
+		return nonceState.(*NonceState).CurrentPage
 	}
 	return ""
 }
@@ -101,7 +118,7 @@ func (h *LoginHandler) handleStart(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(&ErrResponse{Err: "No session id is found"})
 		return
 	}
-	nonce := h.createNonceFor(sessionId.(string))
+	nonce := h.createNonceFor(sessionId.(string), r.URL.Query().Get(QueryParamCurrentPage))
 	redirURL := h.getGithubOAuthRedirectURL(nonce)
 	http.Redirect(w, r, redirURL, http.StatusTemporaryRedirect)
 }
@@ -166,6 +183,11 @@ func (h *LoginHandler) handleAuthorizationCode(w http.ResponseWriter, r *http.Re
 
 	if err := h.GithubLoginManager.Login(ctx, sessionId.(string), *tokenResp); err != nil {
 		json.NewEncoder(w).Encode(&ErrResponse{Err: fmt.Sprintf("Failed to login: %+v", err)})
+		return
+	}
+
+	if initialPage := h.getInitialPageByNonce(nonce); initialPage != "" {
+		http.Redirect(w, r, initialPage, http.StatusTemporaryRedirect)
 		return
 	}
 
