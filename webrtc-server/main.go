@@ -54,14 +54,16 @@ func main() {
 	mux.Handle(cli.WsPath, wsHandler)
 	mux.Handle("/conns", connsHandler)
 
-	sessMngr := &pkgsession.CookieSessionManager{}
 	cntHandler := &pkghandler.CounterHandler{}
-	sessioHandler := pkghandler.WithSessionHandler(cntHandler, sessMngr)
-	mux.Handle("/counter", sessioHandler)
+	mux.Handle("/counter", cntHandler)
 
+	loginHandler := &pkghandler.LoginHandler{}
+	mux.Handle("/login/", loginHandler)
+
+	sessMngr := &pkgsession.CookieSessionManager{}
 	server := &http.Server{
 		Addr:    cli.ListenAddr,
-		Handler: mux,
+		Handler: pkghandler.WithSessionHandler(mux, sessMngr),
 	}
 	if cli.InjectAllowAllCorsHeaders {
 		server.Handler = pkghandler.WithCORSAllowAny(server.Handler)
