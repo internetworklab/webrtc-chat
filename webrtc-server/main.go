@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
 	"slices"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 
 	"github.com/alecthomas/kong"
 	"github.com/gorilla/websocket"
+	"github.com/joho/godotenv"
 )
 
 type CLI struct {
@@ -22,6 +24,7 @@ type CLI struct {
 	AllowedOrigins            []string      `name:"allowed-origin" help:"Allowed origins for CORS (may be specified multiple times)"`
 	DefaultCorsAllowed        bool          `name:"default-cors-allowed" help:"Allow requests with absent Origin header" default:"true"`
 	InjectAllowAllCorsHeaders bool          `name:"inject-allow-all-cors-headers" help:"Inject CORS headers that allow all origins (for debugging purposes)"`
+	GithubLoginRedirectURL    string        `name:"github-login-redir-url" help:"The redirect_uri parameter that will be pass to Github OAuth login API" default:"http://localhost:3000/api/login/auth"`
 }
 
 var cli CLI
@@ -40,6 +43,21 @@ func (c *CLI) getOriginValidator() func(r *http.Request) bool {
 func main() {
 	kong.Parse(&cli)
 
+	// Load .env file if it exists (ignore error if file doesn't exist)
+	if err := godotenv.Load(); err != nil {
+		log.Println("No .env file found or error loading .env file, continuing with existing environment variables")
+	}
+
+	gh_cli_id := os.Getenv("GH_LOGIN_CLIENT_ID")
+	if gh_cli_id == "" {
+		log.Fatalf("Github OAuth Client Id not found")
+	}
+
+	gh_cli_sec := os.Getenv("GH_LOGIN_CLIENT_SECRET")
+	if gh_cli_sec == "" {
+		log.Fatalf("Github OAuth Client Secret not found")
+	}
+
 	upgrader := websocket.Upgrader{
 		CheckOrigin: cli.getOriginValidator(),
 	}
@@ -57,7 +75,11 @@ func main() {
 	cntHandler := &pkghandler.CounterHandler{}
 	mux.Handle("/counter", cntHandler)
 
-	loginHandler := &pkghandler.LoginHandler{}
+	loginHandler := &pkghandler.LoginHandler{
+		GithubOAuthClientId:  gh_cli_id,
+		GithubOAuthAppSecret: []byte(gh_cli_sec),
+		GithubOAuthRedirURL:  cli.GithubLoginRedirectURL,
+	}
 	mux.Handle("/login/", loginHandler)
 
 	sessMngr := &pkgsession.CookieSessionManager{}

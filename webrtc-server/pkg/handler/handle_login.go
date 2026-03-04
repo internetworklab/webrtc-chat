@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -12,20 +11,11 @@ import (
 	"sync"
 	"time"
 
+	pkggithub "example.com/webrtcserver/pkg/github"
 	"github.com/google/uuid"
 )
 
 const QueryParamCurrentPage string = "current_page"
-
-type GithubTokenResponse struct {
-	AccessToken string `json:"access_token"`
-	Scope       string `json:"scope,omitempty"`
-	TokenType   string `json:"token_type,omitempty"`
-}
-
-type GithubLoginManager interface {
-	Login(ctx context.Context, sessionId string, ghToken GithubTokenResponse) error
-}
 
 type NonceState struct {
 	SessionId   string
@@ -50,7 +40,7 @@ type LoginHandler struct {
 
 	// If this is empty, we would use default value (see github docs) for it.
 	GithubOAuthTokenEndpoint string
-	GithubLoginManager       GithubLoginManager
+	GithubLoginManager       pkggithub.GithubLoginManager
 }
 
 func (h *LoginHandler) getGithubLoginPage() string {
@@ -211,7 +201,7 @@ func (h *LoginHandler) handleAuthorizationCode(w http.ResponseWriter, r *http.Re
 	}
 	defer resp.Body.Close()
 
-	tokenResp := new(GithubTokenResponse)
+	tokenResp := new(pkggithub.GithubTokenResponse)
 	if err := json.NewDecoder(resp.Body).Decode(tokenResp); err != nil {
 		json.NewEncoder(w).Encode(&ErrResponse{Err: "Failed to decode github token api response"})
 		return
