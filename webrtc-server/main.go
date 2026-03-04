@@ -9,6 +9,7 @@ import (
 	pkgconnreg "example.com/webrtcserver/pkg/connreg"
 	pkghandler "example.com/webrtcserver/pkg/handler"
 	pkgsafemap "example.com/webrtcserver/pkg/safemap"
+	pkgsession "example.com/webrtcserver/pkg/session"
 
 	"github.com/alecthomas/kong"
 	"github.com/gorilla/websocket"
@@ -52,6 +53,11 @@ func main() {
 	mux := http.NewServeMux()
 	mux.Handle(cli.WsPath, wsHandler)
 	mux.Handle("/conns", connsHandler)
+
+	sessMngr := &pkgsession.CookieSessionManager{}
+	cntHandler := &pkghandler.CounterHandler{}
+	sessioHandler := pkghandler.WithSessionHandler(cntHandler, sessMngr)
+	mux.Handle("/counter", sessioHandler)
 
 	server := &http.Server{
 		Addr:    cli.ListenAddr,

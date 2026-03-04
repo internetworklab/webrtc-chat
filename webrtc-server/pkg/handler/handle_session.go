@@ -36,7 +36,7 @@ func (h *SessionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		sessionId = h.sess.CreateSession(ctx, w, r)
 	}
 
-	ctx = context.WithValue(ctx, CtxSessionKey("sessionId"), sessionId)
+	ctx = context.WithValue(ctx, CtxSessionKeySessionId, sessionId)
 	r = r.WithContext(ctx)
 
 	h.origin.ServeHTTP(w, r)
