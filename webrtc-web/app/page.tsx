@@ -64,7 +64,6 @@ import { createThumbnailFromFile } from "@/apis/thumbnail";
 import { useUnreads } from "@/apis/unreads";
 import { useScrollTop } from "@/apis/scrollTop";
 import { unmarshalMessagePatchOrder } from "@/apis/message_patch";
-import { getICEServerURLs } from "@/apis/ice";
 import { appendWsPathToCurrentOrigin, getSignallingServers } from "@/apis/ws";
 import { ServerSelector } from "@/components/ServerSelector";
 import { useFileDrop } from "@/components/useFileDrop";

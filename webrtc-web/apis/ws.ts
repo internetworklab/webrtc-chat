@@ -1,5 +1,5 @@
-import { getDN42ICEServerURLs, getICEServerURLs } from "./ice";
-import { IAPKind, WSServer } from "./types";
+import { WSServer } from "./types";
+import serversJson from "../servers.json";
 
 /**
  * Build a WebSocket URL from the current origin by appending the given path.
@@ -84,43 +84,6 @@ function sortSignallingServers(wsServers: WSServer[]): WSServer[] {
 }
 
 export function getSignallingServers(): WSServer[] {
-  const servers: WSServer[] = [
-    {
-      url: "/api/ws",
-      name: "Main",
-      id: "main",
-      iceServers: ["stun:stun.l.google.com:19302"],
-      apiPrefix: "/api",
-    },
-    {
-      url: "/api/ws",
-      name: "Test Server",
-      id: "test",
-      iceServers: ["stun:webrtc-stun.duststars.dn42:3478"],
-      apiPrefix: "/api",
-    },
-    {
-      url: "/api/ws",
-      name: "DN42/NeoNetwork",
-      id: "dn42",
-      iceServers: ["stun:webrtc-stun.duststars.dn42:3478"],
-      apiPrefix: "/api",
-    },
-    {
-      url: "/api/ws",
-      name: "Test Server (Mock IAP)",
-      id: "mock-iap",
-      iceServers: ["stun:webrtc-stun.duststars.dn42:3478"],
-      apiPrefix: "/api",
-      iap: {
-        name: "mock-iap",
-        kind: IAPKind.MockIAP,
-        displayName: "Login with Mock IAP",
-        loginUrl: "https://mock-iap.example.com/login",
-        loginButtonIconDataURL:
-          "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0Ij48cGF0aCBkPSJNMTIgMkM2LjQ4IDIgMiA2LjQ4IDIgMTJzNC40OCAxMCAxMCAxMCAxMC00LjQ4IDEwLTEwUzE3LjUyIDIgMTIgMnoiLz48L3N2Zz4=",
-      },
-    },
-  ];
+  const servers: WSServer[] = serversJson as any;
   return sortSignallingServers(servers);
 }
