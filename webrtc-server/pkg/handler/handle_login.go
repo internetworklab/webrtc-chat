@@ -33,15 +33,42 @@ type NonceState struct {
 }
 
 type LoginHandler struct {
-	nonceMap                 sync.Map
-	NonceLifespan            time.Duration
-	GithubOAuthClientId      string
-	GithubOAuthAppSecret     []byte
-	GithubOAuthRedirURL      string
-	GithubOAuthLoginPage     string
-	GithubOAuthScope         string
+	nonceMap             sync.Map
+	NonceLifespan        time.Duration
+	GithubOAuthClientId  string
+	GithubOAuthAppSecret []byte
+	GithubOAuthRedirURL  string
+
+	// If this is empty, we would use default value for it.
+	GithubOAuthLoginPage string
+
+	GithubOAuthScope string
+
+	// If this is empty, we would use default value for it.
 	GithubOAuthTokenEndpoint string
 	GithubLoginManager       GithubLoginManager
+}
+
+func (h *LoginHandler) getGithubLoginPage() string {
+	if h.GithubOAuthLoginPage != "" {
+		return h.GithubOAuthLoginPage
+	}
+	return "https://github.com/login/oauth/authorize"
+}
+
+func (h *LoginHandler) getGithubTokenEndpoint() string {
+	if h.GithubOAuthTokenEndpoint != "" {
+		return h.GithubOAuthTokenEndpoint
+	}
+	return "https://github.com/login/oauth/access_token"
+}
+
+func (h *LoginHandler) getGithubOAuthScope() string {
+	if h.GithubOAuthScope != "" {
+		return h.GithubOAuthScope
+	}
+	scopes := []string{"read:user"}
+	return strings.Join(scopes, ",")
 }
 
 func (h *LoginHandler) getNonceLifespan() time.Duration {
@@ -100,9 +127,9 @@ func (h *LoginHandler) getGithubOAuthRedirectURL(nonce string) string {
 	urlVals := url.Values{}
 	urlVals.Set("client_id", h.GithubOAuthClientId)
 	urlVals.Set("redirect_uri", h.GithubOAuthRedirURL)
-	urlVals.Set("scope", h.GithubOAuthScope)
+	urlVals.Set("scope", h.getGithubOAuthScope())
 	urlVals.Set("state", nonce)
-	urlObj, err := url.Parse(h.GithubOAuthLoginPage)
+	urlObj, err := url.Parse(h.getGithubLoginPage())
 	if err != nil {
 		log.New(os.Stderr, "LoginHandler", 0).Println("Invalid github login page url:", err)
 		return ""
@@ -159,7 +186,7 @@ func (h *LoginHandler) handleAuthorizationCode(w http.ResponseWriter, r *http.Re
 	urlVals.Set("code", authZCode)
 	urlVals.Set("redirect_uri", h.GithubOAuthRedirURL)
 
-	tokenUrlObj, err := url.Parse(h.GithubOAuthTokenEndpoint)
+	tokenUrlObj, err := url.Parse(h.getGithubTokenEndpoint())
 	if err != nil {
 		json.NewEncoder(w).Encode(&ErrResponse{Err: fmt.Sprintf("Invalid github token endpoint: %+v", h.GithubOAuthTokenEndpoint)})
 		return
