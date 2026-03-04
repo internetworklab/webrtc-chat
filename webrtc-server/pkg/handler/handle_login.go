@@ -29,7 +29,7 @@ type LoginHandler struct {
 	NonceLifespan time.Duration
 
 	GithubOAuthClientId  string
-	GithubOAuthAppSecret []byte
+	GithubOAuthAppSecret string
 	GithubOAuthRedirURL  string
 
 	// If this is empty, we would use default value (see github docs) for it.
@@ -176,7 +176,7 @@ func (h *LoginHandler) handleAuthorizationCode(w http.ResponseWriter, r *http.Re
 
 	urlVals := url.Values{}
 	urlVals.Set("client_id", h.GithubOAuthClientId)
-	urlVals.Set("client_secret", string(h.GithubOAuthAppSecret))
+	urlVals.Set("client_secret", h.GithubOAuthAppSecret)
 	urlVals.Set("code", authZCode)
 	urlVals.Set("redirect_uri", h.GithubOAuthRedirURL)
 

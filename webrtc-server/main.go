@@ -8,6 +8,7 @@ import (
 	"time"
 
 	pkgconnreg "example.com/webrtcserver/pkg/connreg"
+	pkggithub "example.com/webrtcserver/pkg/github"
 	pkghandler "example.com/webrtcserver/pkg/handler"
 	pkgsafemap "example.com/webrtcserver/pkg/safemap"
 	pkgsession "example.com/webrtcserver/pkg/session"
@@ -75,12 +76,20 @@ func main() {
 	cntHandler := &pkghandler.CounterHandler{}
 	mux.Handle("/counter", cntHandler)
 
+	ghTokenManager := &pkggithub.MemoryGithubLoginManager{}
+
 	loginHandler := &pkghandler.LoginHandler{
 		GithubOAuthClientId:  gh_cli_id,
-		GithubOAuthAppSecret: []byte(gh_cli_sec),
+		GithubOAuthAppSecret: gh_cli_sec,
 		GithubOAuthRedirURL:  cli.GithubLoginRedirectURL,
+		GithubLoginManager:   ghTokenManager,
 	}
 	mux.Handle("/login/", loginHandler)
+
+	profileHandler := &pkghandler.ProfileHandler{
+		GithubTokenRetriever: ghTokenManager,
+	}
+	mux.Handle("/profile", profileHandler)
 
 	sessMngr := &pkgsession.CookieSessionManager{}
 	server := &http.Server{
