@@ -1600,6 +1600,11 @@ export default function Home() {
   const servers: WSServer[] = getSignallingServers();
   const { getValue: getCurrentServer, setValue: setSelectedServer } =
     usePersistentStorage(PSKey.CurrentServer);
+  const { getValue: gerPreferredUsername, setValue: setPreferredUsername } =
+    usePersistentStorage(PSKey.PreferredUsername);
+  const { getValue: getLoginState, setValue: setLoginState } =
+    usePersistentStorage(PSKey.HasLoggedIn);
+  const hasLoggedIn = getLoginState() === "true";
   const selectedServer = getCurrentServer() || (servers?.[0].id ?? "");
 
   const [searchKw, setSearchKw] = useState<string>("");
@@ -1728,7 +1733,7 @@ export default function Home() {
     <Fragment>
       <Box sx={{ display: "flex", flexDirection: "row", height: "100vh" }}>
         <LeftPanel>
-          {connected ? (
+          {hasLoggedIn ? (
             <Box>
               <Box
                 sx={{

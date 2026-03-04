@@ -7,7 +7,7 @@ export function LeftPanel(props: {
   initW?: number;
   children: React.ReactNode;
 }) {
-  const { initW = 420, children } = props;
+  const { initW = 360, children } = props;
   const [width, setWidth] = useState(initW);
   return (
     <Box

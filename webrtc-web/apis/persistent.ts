@@ -22,4 +22,6 @@ export function usePersistentStorage(
 
 export enum PSKey {
   CurrentServer = "current_server",
+  PreferredUsername = "preferred_username",
+  HasLoggedIn = "has_logged_in",
 }
