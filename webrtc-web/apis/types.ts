@@ -315,10 +315,33 @@ export type ConnTrackEntry = {
   audioRef?: AudioConnTrackEntry;
 };
 
+export type MultiLanguageText = {
+  en_US: string;
+};
+
+export type IDProvider = {
+  // Identifier of the IA provider, must be unique among all providers
+  name: string;
+
+  // the Text displayed on the login button
+  // For now, only `displayName` of `string` type is supported
+  // and `MultiLanguageText` type will be supported later as well .
+  displayName: string | MultiLanguageText;
+
+  // The page which the user should be redirected to when they click the login button.
+  loginUrl: string;
+
+  // see https://developer.mozilla.org/en-US/docs/Web/URI/Reference/Schemes/data
+  // format: data:[<media-type>][;base64],<data>
+  // MIME type can be encoded in the DataURL string.
+  loginButtonIconDataURL: string;
+};
+
 export type WSServer = {
   url: string;
   name: string;
   id: string;
   iceServers: string[];
   apiPrefix: string;
+  iap?: IDProvider;
 };
