@@ -11,10 +11,10 @@ export function usePersistentStorage(
   const [state, setState] = useState<string | undefined>(undefined);
   return {
     getValue() {
-      return localStorage.getItem(key) ?? state ?? "";
+      return localStorage?.getItem(key) ?? state ?? "";
     },
     setValue(value: string) {
-      localStorage.setItem(key, value);
+      localStorage?.setItem(key, value);
       setState(value);
     },
   };

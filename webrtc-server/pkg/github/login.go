@@ -2,6 +2,7 @@ package github
 
 import (
 	"context"
+	"log"
 	"sync"
 )
 
@@ -23,6 +24,8 @@ type GithubProfileResponse struct {
 
 type GithubLoginManager interface {
 	Login(ctx context.Context, sessionId string, ghToken GithubTokenResponse) error
+	GetToken(ctx context.Context, sessionId string) (*GithubTokenResponse, error)
+	DeleteToken(ctx context.Context, sessionId string) error
 }
 
 type GithubTokenRetriever interface {
@@ -31,10 +34,14 @@ type GithubTokenRetriever interface {
 
 type MemoryGithubLoginManager struct {
 	store sync.Map
+	Debug bool
 }
 
 // Login stores the GitHub token for the given session ID
 func (m *MemoryGithubLoginManager) Login(ctx context.Context, sessionId string, ghToken GithubTokenResponse) error {
+	if m.Debug {
+		log.Println("Github Login, token:", ghToken.AccessToken)
+	}
 	m.store.Store(sessionId, ghToken)
 	return nil
 }
@@ -47,4 +54,10 @@ func (m *MemoryGithubLoginManager) GetToken(ctx context.Context, sessionId strin
 		return &token, nil
 	}
 	return nil, nil
+}
+
+// Better do this only after the token has been revoked
+func (m *MemoryGithubLoginManager) DeleteToken(ctx context.Context, sessionId string) error {
+	m.store.Delete(sessionId)
+	return nil
 }

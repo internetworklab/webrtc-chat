@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -112,6 +113,9 @@ func (h *LoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		} else if strings.HasSuffix(url.Path, "/login/auth") {
 			h.handleAuthorizationCode(w, r)
 			return
+		} else if strings.HasSuffix(url.Path, "/login/delete") {
+			h.handleLogout(w, r)
+			return
 		}
 	}
 	h.handleNotFoundForThis(w, r)
@@ -217,6 +221,38 @@ func (h *LoginHandler) handleAuthorizationCode(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	w.WriteHeader(http.StatusOK)
+}
+
+func (h *LoginHandler) handleLogout(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	sessId := ctx.Value(CtxSessionKeySessionId)
+	if sessId == nil {
+		json.NewEncoder(w).Encode(&ErrResponse{Err: "No valid session id is found"})
+		return
+	}
+
+	if tokenObj, err := h.GithubLoginManager.GetToken(ctx, sessId.(string)); err == nil && tokenObj != nil {
+		u := fmt.Sprintf("https://api.github.com/applications/%s/token", h.GithubOAuthClientId)
+		var reqBody bytes.Buffer
+		json.NewEncoder(&reqBody).Encode(map[string]string{"access_token": tokenObj.AccessToken})
+		req, _ := http.NewRequestWithContext(ctx, http.MethodDelete, u, &reqBody)
+		req.SetBasicAuth(h.GithubOAuthClientId, h.GithubOAuthAppSecret)
+		req.Header.Set("Accept", "application/vnd.github+json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(&ErrResponse{Err: "Failed to revoke Github access_token"})
+			return
+		}
+		if err := h.GithubLoginManager.DeleteToken(ctx, sessId.(string)); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(&ErrResponse{Err: "Failed to relete token from memory"})
+			return
+		}
+		w.WriteHeader(resp.StatusCode)
+		return
+	}
 	w.WriteHeader(http.StatusOK)
 }
 

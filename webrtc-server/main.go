@@ -26,6 +26,7 @@ type CLI struct {
 	DefaultCorsAllowed        bool          `name:"default-cors-allowed" help:"Allow requests with absent Origin header" default:"true"`
 	InjectAllowAllCorsHeaders bool          `name:"inject-allow-all-cors-headers" help:"Inject CORS headers that allow all origins (for debugging purposes)"`
 	GithubLoginRedirectURL    string        `name:"github-login-redir-url" help:"The redirect_uri parameter that will be pass to Github OAuth login API" default:"http://localhost:3000/api/login/auth"`
+	Debug                     bool          `name:"debug" help:"Toggle this to make it print extra verbose logs in stdout" default:"false"`
 }
 
 var cli CLI
@@ -76,7 +77,9 @@ func main() {
 	cntHandler := &pkghandler.CounterHandler{}
 	mux.Handle("/counter", cntHandler)
 
-	ghTokenManager := &pkggithub.MemoryGithubLoginManager{}
+	ghTokenManager := &pkggithub.MemoryGithubLoginManager{
+		Debug: cli.Debug,
+	}
 
 	loginHandler := &pkghandler.LoginHandler{
 		GithubOAuthClientId:  gh_cli_id,
