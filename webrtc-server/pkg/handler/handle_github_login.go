@@ -8,11 +8,14 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	pkggithub "example.com/webrtcserver/pkg/github"
+	pkglogin "example.com/webrtcserver/pkg/models/login"
+	pkguser "example.com/webrtcserver/pkg/models/user"
 	"github.com/google/uuid"
 )
 
@@ -44,6 +47,8 @@ type GithubOAuthLoginHandler struct {
 	GithubLoginManager       pkggithub.GithubLoginManager
 
 	LoginSuccessRedirectURL string
+	UserManager             pkguser.UserManager
+	UserSessionManager      pkglogin.UserSessionManager
 }
 
 func (h *GithubOAuthLoginHandler) getGithubLoginPage() string {
@@ -168,23 +173,27 @@ func (h *GithubOAuthLoginHandler) handleAuthorizationCode(w http.ResponseWriter,
 	nonce := r.URL.Query().Get("state")
 	ctx := r.Context()
 	if nonce == "" {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(&ErrResponse{Err: "No nonce is found in the request"})
 		return
 	}
 
 	sessionId := ctx.Value(CtxSessionKeySessionId)
 	if sessionId == nil {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(&ErrResponse{Err: "No session id is found"})
 		return
 	}
 
 	if s := h.getSessionIdByNonce(nonce); s == "" || s != sessionId.(string) {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(&ErrResponse{Err: fmt.Sprintf("Invalid nonce %+v, no session is bound", nonce)})
 		return
 	}
 
 	authZCode := r.URL.Query().Get("code")
 	if authZCode == "" {
+		w.WriteHeader(http.StatusUnauthorized)
 		json.NewEncoder(w).Encode(&ErrResponse{Err: "No authorization code is found in the request"})
 		return
 	}
@@ -197,6 +206,7 @@ func (h *GithubOAuthLoginHandler) handleAuthorizationCode(w http.ResponseWriter,
 
 	tokenUrlObj, err := url.Parse(h.getGithubTokenEndpoint())
 	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
 		json.NewEncoder(w).Encode(&ErrResponse{Err: fmt.Sprintf("Invalid github token endpoint: %+v", h.GithubOAuthTokenEndpoint)})
 		return
 	}
@@ -204,6 +214,7 @@ func (h *GithubOAuthLoginHandler) handleAuthorizationCode(w http.ResponseWriter,
 	tokenUrlObj.RawQuery = urlVals.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenUrlObj.String(), nil)
 	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
 		json.NewEncoder(w).Encode(&ErrResponse{Err: "Failed to create request to github token endpoint"})
 		return
 	}
@@ -211,6 +222,7 @@ func (h *GithubOAuthLoginHandler) handleAuthorizationCode(w http.ResponseWriter,
 	cli := http.DefaultClient
 	resp, err := cli.Do(req)
 	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
 		json.NewEncoder(w).Encode(&ErrResponse{Err: fmt.Sprintf("Failed to get token from github: %+v", err)})
 		return
 	}
@@ -218,12 +230,48 @@ func (h *GithubOAuthLoginHandler) handleAuthorizationCode(w http.ResponseWriter,
 
 	tokenResp := new(pkggithub.GithubTokenResponse)
 	if err := json.NewDecoder(resp.Body).Decode(tokenResp); err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
 		json.NewEncoder(w).Encode(&ErrResponse{Err: "Failed to decode github token api response"})
 		return
 	}
 
 	if err := h.GithubLoginManager.Login(ctx, sessionId.(string), *tokenResp); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(&ErrResponse{Err: fmt.Sprintf("Failed to login: %+v", err)})
+		return
+	}
+
+	profile, err := pkggithub.GetGithubProfileByToken(ctx, tokenResp.AccessToken)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(&ErrResponse{Err: fmt.Sprintf("Failed to get Github user profile: %v", err)})
+		return
+	}
+
+	githubId := profile.Id
+	if githubId == nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(&ErrResponse{Err: "Failed to get Id of github user"})
+		return
+	}
+
+	ghIdStr := strconv.Itoa(*githubId)
+	newUser := pkguser.User{
+		Username:    profile.Login,
+		DisplayName: profile.Name,
+		AvatarURL:   profile.AvatarURL,
+		GithubId:    ghIdStr,
+	}
+	userObject, _, err := h.UserManager.LoadOrCreateNewUserByGithubId(ctx, ghIdStr, newUser)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(&ErrResponse{Err: "Failed to load user from store"})
+		return
+	}
+
+	if err := h.UserSessionManager.LogIn(ctx, userObject.Id, sessionId.(string)); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(&ErrResponse{Err: "Failed to log user in"})
 		return
 	}
 
@@ -254,7 +302,14 @@ func (h *GithubOAuthLoginHandler) handleLogout(w http.ResponseWriter, r *http.Re
 	ctx := r.Context()
 	sessId := ctx.Value(CtxSessionKeySessionId)
 	if sessId == nil {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(&ErrResponse{Err: "No valid session id is found"})
+		return
+	}
+
+	if err := h.UserSessionManager.LogOut(ctx, sessId.(string)); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(&ErrResponse{Err: "Unable to log user out, internal problem"})
 		return
 	}
 

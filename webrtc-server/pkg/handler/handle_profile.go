@@ -2,14 +2,20 @@ package handler
 
 import (
 	"encoding/json"
-	"fmt"
+	"log"
 	"net/http"
+	"os"
 
-	pkggithub "example.com/webrtcserver/pkg/github"
+	pkglogin "example.com/webrtcserver/pkg/models/login"
+	pkguser "example.com/webrtcserver/pkg/models/user"
 )
 
 type ProfileHandler struct {
-	GithubTokenRetriever pkggithub.GithubTokenRetriever
+	// Get the user object from userId
+	UserManager pkguser.UserManager
+
+	// Check if current session has logged in
+	UserSessionManager pkglogin.UserSessionManager
 }
 
 type ProfileResponse struct {
@@ -22,45 +28,43 @@ func (h *ProfileHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	sessId := ctx.Value(CtxSessionKeySessionId)
 	if sessId == nil {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(&ErrResponse{Err: "No session Id is found"})
 		return
 	}
 
-	tokenObj, err := h.GithubTokenRetriever.GetToken(ctx, sessId.(string))
-	if err != nil || tokenObj == nil {
-		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(&ErrResponse{Err: "Failed to retrieve Github token for: " + sessId.(string)})
-		return
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.github.com/user", nil)
+	userId, err := h.UserSessionManager.GetUserIdBySessionId(ctx, sessId.(string))
 	if err != nil {
-		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(&ErrResponse{Err: "Failed to create HTTP request to obtain profile of current Github user"})
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(&ErrResponse{Err: "Can't determine if you has logged in"})
 		return
 	}
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", tokenObj.AccessToken))
-	req.Header.Set("Accept", "application/json")
 
-	cli := http.DefaultClient
-	resp, err := cli.Do(req)
+	if userId == "" {
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(&ErrResponse{Err: "Unauthorized"})
+		return
+	}
+
+	userObj, err := h.UserManager.GetUserById(ctx, userId)
 	if err != nil {
-		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(&ErrResponse{Err: "Failed to obtain profile of current Github user"})
-		return
-	}
-	defer resp.Body.Close()
-
-	profileObject := new(pkggithub.GithubProfileResponse)
-	if err := json.NewDecoder(resp.Body).Decode(profileObject); err != nil {
-		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(&ErrResponse{Err: "Failed to obtain profile of current Github user"})
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(&ErrResponse{Err: "Can't access internal user store"})
 		return
 	}
 
-	json.NewEncoder(w).Encode(&ProfileResponse{
-		Username:    profileObject.Login,
-		DisplayName: profileObject.Name,
-		AvatarURL:   profileObject.AvatarURL,
+	if userObj == nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(&ErrResponse{Err: "User didn't found"})
+		return
+	}
+
+	err = json.NewEncoder(w).Encode(&ProfileResponse{
+		Username:    userObj.Username,
+		DisplayName: userObj.DisplayName,
+		AvatarURL:   userObj.AvatarURL,
 	})
+	if err != nil {
+		log.New(os.Stderr, "", 0).Printf("Cant format response: %v", err)
+	}
 }

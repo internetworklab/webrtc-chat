@@ -15,21 +15,18 @@ type GithubTokenResponse struct {
 // More on https://docs.github.com/en/rest/users/users?apiVersion=2022-11-28
 type GithubProfileResponse struct {
 	Login     string `json:"login"`
-	Id        int    `json:"id"`
+	Id        *int   `json:"id,omitempty"`
 	AvatarURL string `json:"avatar_url,omitempty"`
 	HTMLURL   string `json:"html_url,omitempty"`
 	Type      string `json:"type,omitempty"`
 	Name      string `json:"name,omitempty"`
 }
 
+// The purposes of an GithubLoginManager is to associate or de-associate a session with a Github token
 type GithubLoginManager interface {
 	Login(ctx context.Context, sessionId string, ghToken GithubTokenResponse) error
 	GetToken(ctx context.Context, sessionId string) (*GithubTokenResponse, error)
 	DeleteToken(ctx context.Context, sessionId string) error
-}
-
-type GithubTokenRetriever interface {
-	GetToken(ctx context.Context, sessionId string) (*GithubTokenResponse, error)
 }
 
 type MemoryGithubLoginManager struct {
