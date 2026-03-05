@@ -18,12 +18,12 @@ import (
 
 const QueryParamCurrentPage string = "current_page"
 
-type NonceState struct {
+type GithubOAuthLoginNonceState struct {
 	SessionId   string
 	CurrentPage string
 }
 
-type LoginHandler struct {
+type GithubOAuthLoginHandler struct {
 	nonceMap sync.Map
 
 	// If this is empty, we would use default value (5m) for it.
@@ -46,21 +46,21 @@ type LoginHandler struct {
 	LoginSuccessRedirectURL string
 }
 
-func (h *LoginHandler) getGithubLoginPage() string {
+func (h *GithubOAuthLoginHandler) getGithubLoginPage() string {
 	if h.GithubOAuthLoginPage != "" {
 		return h.GithubOAuthLoginPage
 	}
 	return "https://github.com/login/oauth/authorize"
 }
 
-func (h *LoginHandler) getGithubTokenEndpoint() string {
+func (h *GithubOAuthLoginHandler) getGithubTokenEndpoint() string {
 	if h.GithubOAuthTokenEndpoint != "" {
 		return h.GithubOAuthTokenEndpoint
 	}
 	return "https://github.com/login/oauth/access_token"
 }
 
-func (h *LoginHandler) getGithubOAuthScope() string {
+func (h *GithubOAuthLoginHandler) getGithubOAuthScope() string {
 	if h.GithubOAuthScope != "" {
 		return h.GithubOAuthScope
 	}
@@ -68,7 +68,7 @@ func (h *LoginHandler) getGithubOAuthScope() string {
 	return strings.Join(scopes, " ")
 }
 
-func (h *LoginHandler) getNonceLifespan() time.Duration {
+func (h *GithubOAuthLoginHandler) getNonceLifespan() time.Duration {
 	const defaultNonceLifespan = 5 * time.Minute
 	if h.NonceLifespan == 0 {
 		log.Printf("NonceLifespan is not set, using default: %+v", defaultNonceLifespan.String())
@@ -77,9 +77,9 @@ func (h *LoginHandler) getNonceLifespan() time.Duration {
 	return h.NonceLifespan
 }
 
-func (h *LoginHandler) createNonceFor(sessionId string, currentPage string) string {
+func (h *GithubOAuthLoginHandler) createNonceFor(sessionId string, currentPage string) string {
 	nonce := uuid.NewString()
-	h.nonceMap.Store(nonce, &NonceState{
+	h.nonceMap.Store(nonce, &GithubOAuthLoginNonceState{
 		SessionId:   sessionId,
 		CurrentPage: currentPage,
 	})
@@ -93,21 +93,21 @@ func (h *LoginHandler) createNonceFor(sessionId string, currentPage string) stri
 	return nonce
 }
 
-func (h *LoginHandler) getSessionIdByNonce(nonce string) string {
+func (h *GithubOAuthLoginHandler) getSessionIdByNonce(nonce string) string {
 	if nonceState, ok := h.nonceMap.Load(nonce); ok && nonceState != nil {
-		return nonceState.(*NonceState).SessionId
+		return nonceState.(*GithubOAuthLoginNonceState).SessionId
 	}
 	return ""
 }
 
-func (h *LoginHandler) getInitialPageByNonce(nonce string) string {
+func (h *GithubOAuthLoginHandler) getInitialPageByNonce(nonce string) string {
 	if nonceState, ok := h.nonceMap.Load(nonce); ok && nonceState != nil {
-		return nonceState.(*NonceState).CurrentPage
+		return nonceState.(*GithubOAuthLoginNonceState).CurrentPage
 	}
 	return ""
 }
 
-func (h *LoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *GithubOAuthLoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if url := r.URL; url != nil {
 		if strings.HasSuffix(url.Path, "/login/start") {
 			h.handleStart(w, r)
@@ -123,7 +123,7 @@ func (h *LoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.handleNotFoundForThis(w, r)
 }
 
-func (h *LoginHandler) getGithubOAuthRedirectURL(nonce string) string {
+func (h *GithubOAuthLoginHandler) getGithubOAuthRedirectURL(nonce string) string {
 	urlVals := url.Values{}
 	urlVals.Set("client_id", h.GithubOAuthClientId)
 	urlVals.Set("redirect_uri", h.GithubOAuthRedirURL)
@@ -138,7 +138,7 @@ func (h *LoginHandler) getGithubOAuthRedirectURL(nonce string) string {
 	return urlObj.String()
 }
 
-func (h *LoginHandler) handleStart(w http.ResponseWriter, r *http.Request) {
+func (h *GithubOAuthLoginHandler) handleStart(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	sessionId := ctx.Value(CtxSessionKeySessionId)
 	if sessionId == nil {
@@ -155,7 +155,16 @@ func (h *LoginHandler) handleStart(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, redirURL, http.StatusTemporaryRedirect)
 }
 
-func (h *LoginHandler) handleAuthorizationCode(w http.ResponseWriter, r *http.Request) {
+func (h *GithubOAuthLoginHandler) handleAuthorizationCode(w http.ResponseWriter, r *http.Request) {
+	// See rfc6749 section-4.1.2 and section-4.1.2.1
+	// https://datatracker.ietf.org/doc/html/rfc6749#section-4.1.2.1
+	if err := r.URL.Query().Get("error"); err != "" {
+		errDesc := r.URL.Query().Get("error_description")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(&ErrResponse{Err: fmt.Sprintf("%s: %s", err, errDesc)})
+		return
+	}
+
 	nonce := r.URL.Query().Get("state")
 	ctx := r.Context()
 	if nonce == "" {
@@ -241,7 +250,7 @@ func (h *LoginHandler) handleAuthorizationCode(w http.ResponseWriter, r *http.Re
 	w.WriteHeader(http.StatusOK)
 }
 
-func (h *LoginHandler) handleLogout(w http.ResponseWriter, r *http.Request) {
+func (h *GithubOAuthLoginHandler) handleLogout(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	sessId := ctx.Value(CtxSessionKeySessionId)
 	if sessId == nil {
@@ -273,7 +282,7 @@ func (h *LoginHandler) handleLogout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func (h *LoginHandler) handleNotFoundForThis(w http.ResponseWriter, r *http.Request) {
+func (h *GithubOAuthLoginHandler) handleNotFoundForThis(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotFound)
 	json.NewEncoder(w).Encode(&ErrResponse{Err: fmt.Sprintf("Path %s has no handler attached", r.URL.Path)})
 }

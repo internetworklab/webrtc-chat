@@ -82,7 +82,7 @@ func main() {
 		Debug: cli.Debug,
 	}
 
-	loginHandler := &pkghandler.LoginHandler{
+	loginHandler := &pkghandler.GithubOAuthLoginHandler{
 		GithubOAuthClientId:     gh_cli_id,
 		GithubOAuthAppSecret:    gh_cli_sec,
 		GithubOAuthRedirURL:     cli.GithubLoginRedirectURL,
