@@ -3,6 +3,7 @@
 import { WSServer } from "@/apis/types";
 import { Box, TextField, Select, MenuItem, Button } from "@mui/material";
 import { IaPLoginButton } from "./LoginButton";
+import { Fragment } from "react";
 
 // Select what signalling server to use
 
@@ -34,15 +35,6 @@ export function ServerSelector(props: {
     if (hasIAP && selectedServerObj?.iap?.loginUrl) {
       window.location.href = selectedServerObj.iap.loginUrl;
     }
-  };
-
-  const getDisplayName = () => {
-    if (!selectedServerObj?.iap) return "Connect";
-    const displayName = selectedServerObj.iap.displayName;
-    if (typeof displayName === "string") {
-      return displayName;
-    }
-    return displayName.en_US;
   };
 
   return (
@@ -77,8 +69,8 @@ export function ServerSelector(props: {
             </MenuItem>
           ))}
         </Select>
-        {!hasIAP && (
-          <>
+        {!hasIAP ? (
+          <Fragment>
             <Box sx={{ justifySelf: "right" }}>Pick a Name:</Box>
             <TextField
               fullWidth
@@ -98,37 +90,50 @@ export function ServerSelector(props: {
                 }
               }}
             />
-          </>
-        )}
-      </Box>
-      <Box
-        sx={{
-          display: "flex",
-          justifyContent: "center",
-          marginTop: 2,
-        }}
-      >
-        {hasIAP ? (
-          <IaPLoginButton
-            onClick={handleLoginClick}
-            iapContext={selectedServerObj!.iap!}
-            loading={connecting}
-          />
+            <Box
+              sx={{
+                display: "flex",
+                justifyContent: "center",
+                marginTop: "2",
+                gridColumn: "1 / span 2",
+              }}
+            >
+              <Button
+                variant="contained"
+                loading={connecting}
+                onClick={() => {
+                  const server = servers.find(
+                    (server) => server.id === selectedServer,
+                  );
+                  if (server) {
+                    onConnect(server);
+                  }
+                }}
+              >
+                Connect
+              </Button>
+            </Box>
+          </Fragment>
         ) : (
-          <Button
-            variant="contained"
-            loading={connecting}
-            onClick={() => {
-              const server = servers.find(
-                (server) => server.id === selectedServer,
-              );
-              if (server) {
-                onConnect(server);
-              }
-            }}
-          >
-            Connect
-          </Button>
+          <Fragment>
+            <Box
+              sx={{
+                display: "flex",
+                justifyContent: "center",
+                marginTop: "2",
+                gridColumn: "1 / span 2",
+              }}
+            >
+              <IaPLoginButton
+                onLoggedIn={() => {
+                  // todo:
+                  // 1. display profile in this level's component (Logged in as John Appleseed)
+                  // 2. display the Connect button in this level's components
+                }}
+                iapContext={selectedServerObj!.iap!}
+              />
+            </Box>
+          </Fragment>
         )}
       </Box>
     </Box>
