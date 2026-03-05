@@ -8,18 +8,13 @@ import (
 	"sync/atomic"
 )
 
+// `User`s are immutable, no one should modify a `User` returned from a `UserManager`.
 type User struct {
 	Id          string `json:"id"`
 	Username    string `json:"username"`
 	DisplayName string `json:"display_name"`
 	AvatarURL   string `json:"avatar_url"`
 	GithubId    string `json:"github_id"`
-}
-
-func (u *User) Clone() *User {
-	newUser := new(User)
-	*newUser = *u
-	return newUser
 }
 
 type UserManager interface {
@@ -30,7 +25,6 @@ type UserManager interface {
 }
 
 type InMemoryUserStore struct {
-	Revision  int
 	Users     []User
 	IndexById map[string]int
 }
@@ -42,11 +36,10 @@ func (store *InMemoryUserStore) Clone() *InMemoryUserStore {
 	newStore.IndexById = make(map[string]int)
 	if store != nil {
 		*newStore = *store
-		newStore.Revision += 1
 		newStore.Users = make([]User, len(store.Users))
 		for i := range store.Users {
 			u := store.Users[i]
-			newStore.Users[i] = *u.Clone()
+			newStore.Users[i] = u
 			newStore.IndexById[u.Id] = i
 		}
 	}
@@ -73,7 +66,7 @@ func (memUserMngr *MemoryUserManager) doAddUser(user User) (*User, bool) {
 		oldStore := memUserMngr.store.Load()
 		if oldStore != nil {
 			if idx, hit := oldStore.IndexById[user.Id]; hit {
-				return oldStore.Users[idx].Clone(), false
+				return &oldStore.Users[idx], false
 			}
 		}
 		if memUserMngr.store.CompareAndSwap(oldStore, oldStore.AddUser(user)) {
