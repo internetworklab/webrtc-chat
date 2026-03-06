@@ -358,3 +358,17 @@ export type WSServer = {
   apiPrefix: string;
   iap?: IDProvider;
 };
+
+export interface Profile {
+  username: string;
+  displayName?: string;
+  avatarURL?: string;
+}
+
+export interface ProfileStatus {
+  logged_in: boolean;
+}
+
+export interface ErrResponse {
+  err: string;
+}
