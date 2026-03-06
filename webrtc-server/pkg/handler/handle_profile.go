@@ -68,3 +68,30 @@ func (h *ProfileHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		log.New(os.Stderr, "", 0).Printf("Cant format response: %v", err)
 	}
 }
+
+type ProfileStatusHandler struct {
+	// Get the user object from userId
+	UserManager pkguser.UserManager
+
+	// Check if current session has logged in
+	UserSessionManager pkglogin.UserSessionManager
+}
+
+type ProfileStatusResponse struct {
+	LoggedIn bool `json:"logged_in"`
+}
+
+func (h *ProfileStatusHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if sessId := ctx.Value(CtxSessionKeySessionId); sessId != nil {
+		if userId, err := h.UserSessionManager.GetUserIdBySessionId(ctx, sessId.(string)); err == nil && userId != "" {
+			if u, err := h.UserManager.GetUserById(ctx, userId); err == nil && u != nil {
+				json.NewEncoder(w).Encode(&ProfileStatusResponse{
+					LoggedIn: true,
+				})
+				return
+			}
+		}
+	}
+	json.NewEncoder(w).Encode(&ProfileStatusResponse{LoggedIn: false})
+}
