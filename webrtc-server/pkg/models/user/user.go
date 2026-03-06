@@ -2,10 +2,14 @@ package user
 
 import (
 	"context"
+	"errors"
 	"sync/atomic"
 
 	"github.com/google/uuid"
 )
+
+// ErrUsernameDuplicated is returned when attempting to create a user with a username that already exists.
+var ErrUsernameDuplicated = errors.New("username already exists")
 
 // `User`s are immutable, no one should modify a `User` returned from a `UserManager`.
 type User struct {
@@ -18,7 +22,7 @@ type User struct {
 
 type UserManager interface {
 	// returns (theUser, created, error)
-	LoadOrCreateNewUserByGithubId(ctx context.Context, githubId string, newUser User) (User, bool, error)
+	LoadOrCreateNewUserByGithubId(ctx context.Context, githubId string, newUser User) (*User, bool, error)
 
 	GetUserById(ctx context.Context, userId string) (*User, error)
 
@@ -59,15 +63,19 @@ func (store *InMemoryUserStore) Clone() *InMemoryUserStore {
 	return newStore
 }
 
-func (store *InMemoryUserStore) AddUser(user User) *InMemoryUserStore {
+func (store *InMemoryUserStore) AddUser(user User) (*InMemoryUserStore, error) {
 	newStore := store.Clone()
 
 	// NOTE: after Clone(), each thread modififies the clone of its own, not the same memory region
 
+	if _, exists := newStore.IndexByUsername[user.Username]; exists {
+		return nil, ErrUsernameDuplicated
+	}
+
 	numId := len(newStore.Users)
 	newStore.updateIndex(&user, numId)
 	newStore.Users = append(newStore.Users, user)
-	return newStore
+	return newStore, nil
 }
 
 type MemoryUserManager struct {
@@ -75,28 +83,35 @@ type MemoryUserManager struct {
 }
 
 // Returns true means new user is created
-func (memUserMngr *MemoryUserManager) doAddUserByGithubId(user User) (*User, bool) {
+func (memUserMngr *MemoryUserManager) doAddUserByGithubId(user User) (*User, bool, error) {
 	for {
 		oldStore := memUserMngr.store.Load()
 		if oldStore != nil {
 			if idx, hit := oldStore.IndexByGithubId[user.GithubId]; hit {
-				return &oldStore.Users[idx], false
+				return &oldStore.Users[idx], false, nil
 			}
 		}
-		if memUserMngr.store.CompareAndSwap(oldStore, oldStore.AddUser(user)) {
-			return &user, true
+		newStore, err := oldStore.AddUser(user)
+		if err != nil {
+			return nil, false, err
+		}
+		if memUserMngr.store.CompareAndSwap(oldStore, newStore) {
+			return &user, true, nil
 		}
 	}
 }
 
-func (memUserMngr *MemoryUserManager) LoadOrCreateNewUserByGithubId(ctx context.Context, githubId string, newUser User) (User, bool, error) {
+func (memUserMngr *MemoryUserManager) LoadOrCreateNewUserByGithubId(ctx context.Context, githubId string, newUser User) (*User, bool, error) {
 
 	if id := newUser.Id; id == "" {
 		newUser.Id = uuid.NewString()
 	}
 
-	u, accepted := memUserMngr.doAddUserByGithubId(newUser)
-	return *u, accepted, nil
+	u, accepted, err := memUserMngr.doAddUserByGithubId(newUser)
+	if err != nil {
+		return nil, false, err
+	}
+	return u, accepted, nil
 }
 
 func (memUserMngr *MemoryUserManager) GetUserById(ctx context.Context, userId string) (*User, error) {

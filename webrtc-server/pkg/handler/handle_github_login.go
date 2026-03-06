@@ -3,8 +3,10 @@ package handler
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"os"
@@ -254,16 +256,36 @@ func (h *GithubOAuthLoginHandler) handleAuthorizationCode(w http.ResponseWriter,
 	}
 
 	ghIdStr := strconv.Itoa(*githubId)
+	originalUsername := profile.Login
 	newUser := pkguser.User{
-		Username:    profile.Login,
+		Username:    originalUsername,
 		DisplayName: profile.Name,
 		AvatarURL:   profile.AvatarURL,
 		GithubId:    ghIdStr,
 	}
-	userObject, _, err := h.UserManager.LoadOrCreateNewUserByGithubId(ctx, ghIdStr, newUser)
-	if err != nil {
+
+	const maxRetries = 5
+	var userObject *pkguser.User
+
+	for i := 0; i < maxRetries; i++ {
+		userObject, _, err = h.UserManager.LoadOrCreateNewUserByGithubId(ctx, ghIdStr, newUser)
+		if err == nil {
+			break
+		}
+		if errors.Is(err, pkguser.ErrUsernameDuplicated) {
+			// Generate random suffix (e.g., -a1b2) and retry
+			randomSuffix := fmt.Sprintf("-%04x", rand.Intn(0x10000))
+			newUser.Username = originalUsername + randomSuffix
+			continue
+		}
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(&ErrResponse{Err: "Failed to load user from store"})
+		return
+	}
+
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(&ErrResponse{Err: "Failed to create user with unique username after maximum retries"})
 		return
 	}
 
