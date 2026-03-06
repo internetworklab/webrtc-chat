@@ -4,6 +4,8 @@ import { WSServer } from "@/apis/types";
 import { Box, TextField, Select, MenuItem, Button } from "@mui/material";
 import { IaPLoginButton } from "./LoginButton";
 import { Fragment } from "react";
+import { PSKey, usePersistentStorage } from "@/apis/persistent";
+import { useLoginStatusPolling } from "@/apis/profile";
 
 // Select what signalling server to use
 
@@ -26,16 +28,43 @@ export function ServerSelector(props: {
     connecting,
   } = props;
 
+  const { getValue: getLoggingIn, setValue: setLoggingIn } =
+    usePersistentStorage(PSKey.LoggingIn);
+  const isLoggingIn = getLoggingIn() === "true";
+
+  const handleLoginClick = () => {
+    // start polling (also the polling state would also survives page reload)
+    setLoggingIn("true");
+
+    // navigate the user to the oauth2 authorization portal
+    if (hasIAP && selectedServerObj?.iap?.loginUrl) {
+      window.open(selectedServerObj.iap.loginUrl);
+    }
+  };
+
   const selectedServerObj = servers.find(
     (server) => server.id === selectedServer,
   );
   const hasIAP = selectedServerObj?.iap && selectedServerObj.iap.loginUrl;
+  const connectBtn = (
+    <Button
+      variant="contained"
+      loading={connecting}
+      onClick={() => {
+        const server = servers.find((server) => server.id === selectedServer);
+        if (server) {
+          onConnect(server);
+        }
+      }}
+    >
+      Connect
+    </Button>
+  );
 
-  const handleLoginClick = () => {
-    if (hasIAP && selectedServerObj?.iap?.loginUrl) {
-      window.location.href = selectedServerObj.iap.loginUrl;
-    }
-  };
+  const { loggedIn, loggedInAs, hintText } = useLoginStatusPolling(
+    selectedServerObj?.apiPrefix || "",
+    3000,
+  );
 
   return (
     <Box
@@ -98,20 +127,7 @@ export function ServerSelector(props: {
                 gridColumn: "1 / span 2",
               }}
             >
-              <Button
-                variant="contained"
-                loading={connecting}
-                onClick={() => {
-                  const server = servers.find(
-                    (server) => server.id === selectedServer,
-                  );
-                  if (server) {
-                    onConnect(server);
-                  }
-                }}
-              >
-                Connect
-              </Button>
+              {connectBtn}
             </Box>
           </Fragment>
         ) : (
@@ -124,14 +140,16 @@ export function ServerSelector(props: {
                 gridColumn: "1 / span 2",
               }}
             >
-              <IaPLoginButton
-                onLoggedIn={() => {
-                  // todo:
-                  // 1. display profile in this level's component (Logged in as John Appleseed)
-                  // 2. display the Connect button in this level's components
-                }}
-                iapContext={selectedServerObj!.iap!}
-              />
+              {isLoggingIn && <Box>{hintText}</Box>}
+              {loggedIn && loggedInAs ? (
+                connectBtn
+              ) : (
+                <IaPLoginButton
+                  loading={isLoggingIn}
+                  onClick={handleLoginClick}
+                  iapContext={selectedServerObj!.iap!}
+                />
+              )}
             </Box>
           </Fragment>
         )}

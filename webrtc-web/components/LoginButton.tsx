@@ -1,39 +1,18 @@
 import { PSKey, usePersistentStorage } from "@/apis/persistent";
+import { useLoginStatusPolling } from "@/apis/profile";
 import { IAPKind, IDProvider } from "@/apis/types";
-import { Button } from "@mui/material";
-import { useEffect } from "react";
+import { Box, Button } from "@mui/material";
+import { ReactNode } from "react";
+
+
 
 export function IaPLoginButton(props: {
   iapContext: IDProvider;
-
-  onLoggedIn: () => void;
+  onClick: () => void;
+  loading: boolean;
 }) {
-  const { iapContext, onLoggedIn } = props;
-  const { getValue: getLoggingIn, setValue: setLoggingIn } =
-    usePersistentStorage(PSKey.LoggingIn);
-  const isLoggingIn = getLoggingIn();
-  useEffect(() => {
-    if (isLoggingIn !== "true") {
-      return;
-    }
-    const it = setInterval(() => {
-      // todo:
-      // check if it is logged in
-      // if yes, set loggingIn to false, call onLoggedIn (set logginIn to false would also cancels the ticker)
-      // otherwise, return this function call, and this would be called at the next tick
-    }, 1500);
-    return () => clearInterval(it);
-  }, [isLoggingIn]);
+  const { iapContext, onClick, loading } = props;
 
-  const handleClick = () => {
-    // start polling (also the polling state would also survives page reload)
-    setLoggingIn("true");
-
-    // navigate the user to the oauth2 authorization portal
-    window.open(iapContext.loginUrl);
-  };
-
-  const loading = false;
   const getDisplayName = () => {
     if (!iapContext) {
       return "Connect";
@@ -50,7 +29,7 @@ export function IaPLoginButton(props: {
       return (
         <Button
           variant="contained"
-          onClick={handleClick}
+          onClick={onClick}
           loading={loading}
           fullWidth
           startIcon={
@@ -67,6 +46,6 @@ export function IaPLoginButton(props: {
         </Button>
       );
     default:
-      return <Button onClick={handleClick}>Login</Button>;
+      return <Button onClick={onClick}>Login</Button>;
   }
 }
