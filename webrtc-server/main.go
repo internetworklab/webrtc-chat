@@ -27,9 +27,10 @@ type CLI struct {
 	AllowedOrigins            []string      `name:"allowed-origin" help:"Allowed origins for CORS (may be specified multiple times)"`
 	DefaultCorsAllowed        bool          `name:"default-cors-allowed" help:"Allow requests with absent Origin header" default:"true"`
 	InjectAllowAllCorsHeaders bool          `name:"inject-allow-all-cors-headers" help:"Inject CORS headers that allow all origins (for debugging purposes)"`
-	GithubLoginRedirectURL    string        `name:"github-login-redir-url" help:"The redirect_uri parameter that will be pass to Github OAuth login API" default:"http://localhost:3000/api/login/auth"`
+	GithubLoginRedirectURL    string        `name:"github-login-redir-url" help:"The redirect_uri parameter that will be pass to Github OAuth login API" default:"http://localhost:3000/api/github/login/auth"`
+	KioubitLoginRedirectURL   string        `name:"kioubit-login-redir-url" help:"The page the user will be redirect to once the authorization grants" default:"http://localhost:3000/api/kioubit/login/auth"`
 	Debug                     bool          `name:"debug" help:"Toggle this to make it print extra verbose logs in stdout" default:"false"`
-	LoginSuccessRedirectURL   string        `name:"login-success-redir-url" help:"The page to which the user will be redirect to once oauth login is successful"`
+	LoginSuccessRedirectURL   string        `name:"login-success-redir-url" help:"The page to which the user will be redirect to once oauth login is successful, this usually should be the home page for a typical SPA web app" default:"http://localhost:3000/"`
 	KioubitLoginPubkey        string        `name:"kioubit-login-pubkey" help:"The path to the PEM pubkey file in order to use the Sign in with Kioubit service, this is optional"`
 }
 
@@ -92,9 +93,7 @@ func main() {
 	cntHandler := &pkghandler.CounterHandler{}
 	mux.Handle("/counter", cntHandler)
 
-	ghTokenManager := &pkggithub.MemoryGithubLoginManager{
-		Debug: cli.Debug,
-	}
+	ghTokenManager := &pkggithub.MemoryGithubLoginManager{}
 
 	if pubkeyPath := cli.KioubitLoginPubkey; pubkeyPath != "" {
 		pubkey, err := os.ReadFile(pubkeyPath)
@@ -102,6 +101,7 @@ func main() {
 			log.Fatalln("Failed to read path", pubkeyPath, err)
 		}
 		mux.Handle("/kioubit/login/", &pkghandler.KioubitLoginHandler{
+			KioubitRedirURL:         cli.KioubitLoginRedirectURL,
 			LoginSuccessRedirectURL: cli.LoginSuccessRedirectURL,
 			UserManager:             userMgr,
 			UserSessionManager:      userSessionMgr,

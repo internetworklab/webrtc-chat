@@ -2,7 +2,6 @@ package github
 
 import (
 	"context"
-	"log"
 	"sync"
 )
 
@@ -31,14 +30,10 @@ type GithubLoginManager interface {
 
 type MemoryGithubLoginManager struct {
 	store sync.Map
-	Debug bool
 }
 
 // Login stores the GitHub token for the given session ID
 func (m *MemoryGithubLoginManager) Login(ctx context.Context, sessionId string, ghToken GithubTokenResponse) error {
-	if m.Debug {
-		log.Println("Github Login, token:", ghToken.AccessToken)
-	}
 	m.store.Store(sessionId, ghToken)
 	return nil
 }
