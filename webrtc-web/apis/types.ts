@@ -321,6 +321,8 @@ export type MultiLanguageText = {
 
 export enum IAPKind {
   MockIAP = "mock-iap",
+  Github = "github",
+  Kioubit = "kioubit",
 }
 
 export type IAPParameters = Record<string, string>;
@@ -340,12 +342,12 @@ export type IDProvider = {
   // the Text displayed on the login button
   // For now, only `displayName` of `string` type is supported
   // and `MultiLanguageText` type will be supported later as well .
-  displayName: string | MultiLanguageText;
+  displayName?: string | MultiLanguageText;
 
   // The page which the user should be redirected to when they click the login button.
   loginUrl: string;
 
-  loginButtonIconDataURL: DataURL;
+  loginButtonIconDataURL?: DataURL;
 
   parameters?: IAPParameters;
 };

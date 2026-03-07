@@ -3,8 +3,7 @@ import { useLoginStatusPolling } from "@/apis/profile";
 import { IAPKind, IDProvider } from "@/apis/types";
 import { Box, Button } from "@mui/material";
 import { ReactNode } from "react";
-
-
+import { KioubitLogin } from "./web-components-declarative/KioubitLoginBtn";
 
 export function IaPLoginButton(props: {
   iapContext: IDProvider;
@@ -25,6 +24,9 @@ export function IaPLoginButton(props: {
   };
 
   switch (iapContext.kind) {
+    case IAPKind.Kioubit:
+      return <KioubitLogin onClick={onClick} />;
+    case IAPKind.Github:
     case IAPKind.MockIAP:
       return (
         <Button

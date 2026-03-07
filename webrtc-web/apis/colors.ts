@@ -52,7 +52,7 @@ export function paintFirstLetterAvatar(username: string): DataURL {
   // Draw the first letter
   const firstLetter = username.charAt(0).toUpperCase();
   ctx.fillStyle = fgColor;
-  ctx.font = `${canvasW * 0.6}px sans-serif`;
+  ctx.font = `bold ${canvasW * 0.6}px sans-serif`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText(firstLetter, canvasW / 2, canvasH / 2);

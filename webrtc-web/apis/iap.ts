@@ -14,7 +14,7 @@ function getDataURLFromBlob(blob: Blob): Promise<DataURL> {
   });
 }
 
-export function mockIAPOperator(): IAPOperator {
+export function githubIAPOperator(): IAPOperator {
   return {
     async getAvatar(username: string): Promise<DataURL> {
       const searchParams = new URLSearchParams();
@@ -33,10 +33,21 @@ export function mockIAPOperator(): IAPOperator {
   };
 }
 
+export function kioubitIAPOperator(): IAPOperator {
+  return {
+    async getAvatar(username: string): Promise<DataURL> {
+      return paintFirstLetterAvatar(username);
+    },
+  };
+}
+
 export function getIAPOperator(kind: IAPKind): IAPOperator {
   switch (kind) {
+    case IAPKind.Kioubit:
+      return kioubitIAPOperator();
+    case IAPKind.Github:
     case IAPKind.MockIAP:
-      return mockIAPOperator();
+      return githubIAPOperator();
     default:
       throw new Error(`Unsupported IAP kind: ${kind}`);
   }

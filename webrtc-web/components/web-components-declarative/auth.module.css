@@ -1,0 +1,46 @@
+.kioubit-btn-dark,
+.kioubit-btn-light {
+    font-weight: 400;
+    font-size: 1rem;
+    line-height: 1.5;
+    padding: 0.5em;
+    display: flex;
+    transition:
+        color 0.15s ease-in-out,
+        background-color 0.15s ease-in-out,
+        border-color 0.15s ease-in-out,
+        box-shadow 0.15s ease-in-out;
+}
+.kioubit-btn-dark {
+    color: #fff;
+    background-color: #343a40;
+    vertical-align: middle;
+    border: 1px solid transparent;
+    border-radius: 0.4rem;
+    align-items: center;
+}
+.kioubit-btn-dark:hover {
+    color: #fff;
+    background-color: #651fff;
+    border-color: #1d2124;
+}
+.kioubit-btn-dark:focus,
+.kioubit-btn-light:focus {
+    outline: 0;
+    box-shadow: 0 0 0 0.2rem rgba(82, 88, 93, 0.5);
+}
+.kioubit-btn-light {
+    color: #fafafa;
+    background-color: #2962ff;
+    border: 1px solid transparent;
+    border-radius: 0.4rem;
+    align-items: center;
+}
+.kioubit-btn-light:hover {
+    color: #fff;
+    background-color: #311b92;
+    border-color: #1d2124;
+}
+.kioubit-btn-logo {
+    margin-right: 0.5em;
+}
