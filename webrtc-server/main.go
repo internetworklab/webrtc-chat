@@ -8,7 +8,6 @@ import (
 	"time"
 
 	pkgconnreg "example.com/webrtcserver/pkg/connreg"
-	pkggithub "example.com/webrtcserver/pkg/github"
 	pkghandler "example.com/webrtcserver/pkg/handler"
 	pkglogin "example.com/webrtcserver/pkg/models/login"
 	pkguser "example.com/webrtcserver/pkg/models/user"
@@ -93,8 +92,6 @@ func main() {
 	cntHandler := &pkghandler.CounterHandler{}
 	mux.Handle("/counter", cntHandler)
 
-	ghTokenManager := &pkggithub.MemoryGithubLoginManager{}
-
 	if pubkeyPath := cli.KioubitLoginPubkey; pubkeyPath != "" {
 		pubkey, err := os.ReadFile(pubkeyPath)
 		if err != nil {
@@ -109,11 +106,14 @@ func main() {
 		})
 	}
 
+	mux.Handle("/logout", &pkghandler.LogoutHandler{
+		UserSessionManager: userSessionMgr,
+	})
+
 	mux.Handle("/github/login/", &pkghandler.GithubOAuthLoginHandler{
 		GithubOAuthClientId:     gh_cli_id,
 		GithubOAuthAppSecret:    gh_cli_sec,
 		GithubOAuthRedirURL:     cli.GithubLoginRedirectURL,
-		GithubLoginManager:      ghTokenManager,
 		LoginSuccessRedirectURL: cli.LoginSuccessRedirectURL,
 		UserManager:             userMgr,
 		UserSessionManager:      userSessionMgr,

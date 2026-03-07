@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -44,7 +45,6 @@ type GithubOAuthLoginHandler struct {
 
 	// If this is empty, we would use default value (see github docs) for it.
 	GithubOAuthTokenEndpoint string
-	GithubLoginManager       pkggithub.GithubLoginManager
 
 	LoginSuccessRedirectURL string
 	UserManager             pkguser.UserManager
@@ -119,9 +119,6 @@ func (h *GithubOAuthLoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 			return
 		} else if strings.HasSuffix(url.Path, "/login/auth") {
 			h.handleAuthorizationCode(w, r)
-			return
-		} else if strings.HasSuffix(url.Path, "/login/delete") {
-			h.handleLogout(w, r)
 			return
 		}
 	}
@@ -234,12 +231,7 @@ func (h *GithubOAuthLoginHandler) handleAuthorizationCode(w http.ResponseWriter,
 		json.NewEncoder(w).Encode(&ErrResponse{Err: "Failed to decode github token api response"})
 		return
 	}
-
-	if err := h.GithubLoginManager.Login(ctx, sessionId.(string), *tokenResp); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(&ErrResponse{Err: fmt.Sprintf("Failed to login: %+v", err)})
-		return
-	}
+	defer revokeGithubToken(h.GithubOAuthClientId, h.GithubOAuthAppSecret, tokenResp.AccessToken)
 
 	profile, err := pkggithub.GetGithubProfileByToken(ctx, tokenResp.AccessToken)
 	if err != nil {
@@ -319,43 +311,27 @@ func (h *GithubOAuthLoginHandler) handleAuthorizationCode(w http.ResponseWriter,
 	w.WriteHeader(http.StatusOK)
 }
 
-func (h *GithubOAuthLoginHandler) handleLogout(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	sessId := ctx.Value(CtxSessionKeySessionId)
-	if sessId == nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(&ErrResponse{Err: "No valid session id is found"})
-		return
+func revokeGithubToken(cliId, cliSec, token string) error {
+	u := fmt.Sprintf("https://api.github.com/applications/%s/token", cliId)
+	var reqBody bytes.Buffer
+	if err := json.NewEncoder(&reqBody).Encode(map[string]string{"access_token": token}); err != nil {
+		return err
 	}
-
-	if err := h.UserSessionManager.LogOut(ctx, sessId.(string)); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(&ErrResponse{Err: "Unable to log user out, internal problem"})
-		return
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodDelete, u, &reqBody)
+	if err != nil {
+		return err
 	}
-
-	if tokenObj, err := h.GithubLoginManager.GetToken(ctx, sessId.(string)); err == nil && tokenObj != nil {
-		u := fmt.Sprintf("https://api.github.com/applications/%s/token", h.GithubOAuthClientId)
-		var reqBody bytes.Buffer
-		json.NewEncoder(&reqBody).Encode(map[string]string{"access_token": tokenObj.AccessToken})
-		req, _ := http.NewRequestWithContext(ctx, http.MethodDelete, u, &reqBody)
-		req.SetBasicAuth(h.GithubOAuthClientId, h.GithubOAuthAppSecret)
-		req.Header.Set("Accept", "application/vnd.github+json")
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil || (resp != nil && resp.StatusCode >= 400) {
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(&ErrResponse{Err: "Failed to revoke Github access_token"})
-			return
-		}
-		if err := h.GithubLoginManager.DeleteToken(ctx, sessId.(string)); err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(&ErrResponse{Err: "Failed to relete token from memory"})
-			return
-		}
-		w.WriteHeader(resp.StatusCode)
-		return
+	req.SetBasicAuth(cliId, cliSec)
+	req.Header.Set("Accept", "application/vnd.github+json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
 	}
-	w.WriteHeader(http.StatusOK)
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("failed to revoke token: status code %d", resp.StatusCode)
+	}
+	return nil
 }
 
 func (h *GithubOAuthLoginHandler) handleNotFoundForThis(w http.ResponseWriter, r *http.Request) {
