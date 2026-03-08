@@ -374,3 +374,10 @@ export interface ProfileStatus {
 export interface ErrResponse {
   err: string;
 }
+
+export enum WSConnStatusShort {
+  Unknown = "unknown",
+  Online = "online",
+  Connecting = "connecting",
+  Offline = "offline",
+}

@@ -25,6 +25,7 @@ import {
   Preference,
   WSServer,
   MessagePatchesMap,
+  WSConnStatusShort,
 } from "@/apis/types";
 import { ChangePreference } from "@/components/ChangePreference";
 import {
@@ -78,6 +79,7 @@ import {
 } from "@/apis/ping";
 import { PSKey, usePersistentStorage } from "@/apis/persistent";
 import { getIAPOperator } from "@/apis/iap";
+import { ConnStatusDisplay } from "@/components/ConnStatusDisplay";
 
 const pingTimeoutMs = 3000;
 const pingIntvMs = 1000;
@@ -120,6 +122,9 @@ function useWs(
   const pingTimerRef = useRef<NodeJS.Timeout | undefined>(undefined);
   const [conns, setConns] = useState<ConnEntry[]>([]);
   const connTrackRef = useRef<ConnTrack>({});
+  const [wsConnStatus, setWSConnStatus] = useState<WSConnStatusShort>(
+    WSConnStatusShort.Unknown,
+  );
 
   const doRefresh = (apiPrefix: string) =>
     getConns(apiPrefix).then((conns) => {
@@ -135,11 +140,13 @@ function useWs(
     const iceServers = server.iceServers;
 
     setConnecting(true);
+    setWSConnStatus(WSConnStatusShort.Connecting);
     const ws = new WebSocket(addr);
     wsRef.current = ws;
     const logSource = "acceptor";
 
     ws.onopen = () => {
+      setWSConnStatus(WSConnStatusShort.Online);
       connectedAtRef.current = Date.now();
       setConnected(true);
       setConnecting(false);
@@ -178,6 +185,7 @@ function useWs(
       setNodeId("");
     };
     ws.onclose = () => {
+      setWSConnStatus(WSConnStatusShort.Offline);
       cleanUp();
     };
     ws.onerror = (error) => {
@@ -419,6 +427,7 @@ function useWs(
     wsRef,
     doConnect,
     connTrackRef,
+    wsConnStatus,
   };
 }
 
@@ -1436,6 +1445,7 @@ export default function Home() {
     wsRef,
     doConnect,
     connTrackRef,
+    wsConnStatus,
   } = useWs(setConnTrackStatus, setMsgPatches, audioCtxRef);
 
   const name = conns
@@ -1724,7 +1734,7 @@ export default function Home() {
 
   const drawerContent = (
     <Fragment>
-      {connected ? (
+      {selectedServer ? (
         <Box>
           <Box
             sx={{
@@ -1740,7 +1750,7 @@ export default function Home() {
               iapOperator={iapOperator}
               username={name ?? ""}
               size="large"
-              preferredColorIdx={preference.indexOfPreferColor}
+              preferredColorIdx={preference?.indexOfPreferColor}
             />
             <Box
               sx={{
@@ -1751,6 +1761,10 @@ export default function Home() {
               }}
             >
               <Box>{name}</Box>
+              <ConnStatusDisplay
+                colorCodes={undefined}
+                connStatus={wsConnStatus}
+              />
               <Tooltip title="Change name">
                 <IconButton
                   sx={{

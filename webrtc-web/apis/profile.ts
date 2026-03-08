@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Profile, ProfileStatus } from "./types";
+import { PSKey, usePersistentStorage } from "./persistent";
 
 export function getProfile(apiPrefix: string) {
   return fetch(`${apiPrefix}/profile`)
@@ -13,9 +14,26 @@ export function getProfileStatus(apiPrefix: string) {
     .then((r) => r as ProfileStatus);
 }
 
+const tryParseProfile = (j: string | null | undefined): Profile | undefined => {
+  try {
+    if (j) {
+      return JSON.parse(j);
+    }
+  } catch (_) {}
+};
+
 export function useLoginStatusPolling(apiPrefix: string, intervalMs: number) {
-  const [loggedIn, setLoggedIn] = useState<boolean | undefined>(undefined);
-  const [loggedInAs, setLoggedInAs] = useState<Profile | undefined>(undefined);
+  const loggedInSt = usePersistentStorage(PSKey.HasLoggedIn);
+  const loggedInAsSt = usePersistentStorage(PSKey.LoggedInAs);
+  const loggedIn = loggedInSt.getValue() === "true";
+  const setLoggedIn = (t: boolean) => loggedInSt.setValue(String(t));
+
+  const loggedInAs: Profile | undefined = tryParseProfile(
+    loggedInAsSt.getValue(),
+  );
+  const setLoggedInAs = (v: Profile) =>
+    loggedInAsSt.setValue(JSON.stringify(v));
+
   const tickerRef = useRef<ReturnType<typeof setTimeout>>(null);
   const clear = () => {
     if (tickerRef.current !== undefined && tickerRef.current !== null) {
