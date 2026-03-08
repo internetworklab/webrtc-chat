@@ -34,7 +34,6 @@ import {
 import { Fragment } from "react/jsx-runtime";
 import { RenderAvatar } from "./RenderAvatar";
 import { RefObject, useEffect, useRef, useState } from "react";
-import { IAPOperator } from "@/apis/iap";
 
 function getFileLoadedRatio(
   file: ChatMessageFile,
@@ -680,7 +679,6 @@ function applyMessagePatches(
 }
 
 export function RenderMessage(props: {
-  iapOperator: IAPOperator | undefined;
   message: ChatMessage;
   patches: MessagePatchOrder[] | undefined;
   onAmend: (amendedMsg: ChatMessage) => void;
@@ -698,7 +696,6 @@ export function RenderMessage(props: {
     fileTransferStatus,
     userPreferenceMap,
     audioContextRef,
-    iapOperator,
   } = props;
   const peername = userPreferenceMap[message.fromNodeId]?.name ?? "";
   const peercoloridxprefer =
@@ -726,7 +723,6 @@ export function RenderMessage(props: {
       }}
     >
       <RenderAvatar
-        iapOperator={iapOperator}
         username={peername}
         preferredColorIdx={peercoloridxprefer}
       />

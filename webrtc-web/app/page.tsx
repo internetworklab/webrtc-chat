@@ -74,10 +74,10 @@ import {
   setupWsPing,
 } from "@/apis/ping";
 import { PSKey, usePersistentStorage } from "@/apis/persistent";
-import { getIAPOperator } from "@/apis/iap";
 import { ConnStatusDisplay } from "@/components/ConnStatusDisplay";
 import { useLoginStatusPolling } from "@/apis/profile";
 import { useQuery } from "@tanstack/react-query";
+import { logout } from "@/apis/logout";
 
 const pingTimeoutMs = 3000;
 const pingIntvMs = 1000;
@@ -1530,13 +1530,10 @@ export default function Home() {
   const selectedserverObject = servers?.find(
     (server) => server.id === selectedServerId,
   );
-  const { loggedIn, loggedInAs } = useLoginStatusPolling(
+  const { loggedIn, loggedInAs,clearLoggedInState } = useLoginStatusPolling(
     selectedserverObject?.apiPrefix || "",
     3000,
   );
-  const iapOperator = selectedserverObject?.iap?.kind
-    ? getIAPOperator(selectedserverObject.iap.kind)
-    : undefined;
 
   const {
     rtt,
@@ -1842,7 +1839,9 @@ export default function Home() {
   };
 
   const handleLogout = () => {
-    alert("Todo");
+    logout(selectedserverObject?.apiPrefix || "");
+    setPinnedServer("");
+    clearLoggedInState()
   };
 
   const drawerContent = (
@@ -1860,7 +1859,6 @@ export default function Home() {
             }}
           >
             <RenderAvatar
-              iapOperator={iapOperator}
               username={loggedInAs?.username ?? ""}
               size="large"
               preferredColorIdx={preference?.indexOfPreferColor}
@@ -2027,7 +2025,6 @@ export default function Home() {
                 </IconButton>
               )}
               <RenderAvatar
-                iapOperator={iapOperator}
                 username={activeConn ? userPreferenceMap[activeConn]?.name : ""}
                 size="small"
                 preferredColorIdx={
@@ -2065,7 +2062,6 @@ export default function Home() {
                 >
                   {messages.map((message) => (
                     <RenderMessage
-                      iapOperator={iapOperator}
                       key={message.messageId}
                       message={message}
                       patches={msgPatches[message.messageId] || []}

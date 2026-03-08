@@ -2,23 +2,17 @@
 
 import { Box } from "@mui/material";
 import { getPreferredColor } from "./ChangePreference";
-import { IAPOperator } from "@/apis/iap";
 import { useQuery } from "@tanstack/react-query";
+import { getAvatar } from "@/apis/profile";
+import { paintFirstLetterAvatar } from "@/apis/colors";
 
 export function RenderAvatar(props: {
-  iapOperator: IAPOperator | undefined;
   username: string;
   url?: string;
   size?: "default" | "small" | "large";
   preferredColorIdx?: number | string;
 }) {
-  const {
-    iapOperator,
-    username,
-    url,
-    size = "default",
-    preferredColorIdx,
-  } = props;
+  const { username, url, size = "default", preferredColorIdx } = props;
   const firstCap =
     username && username.length > 0 ? username[0].toUpperCase() : "";
 
@@ -45,15 +39,12 @@ export function RenderAvatar(props: {
   const { data: avatarUrl } = useQuery({
     queryKey: ["avatar", username],
     queryFn: async () => {
-      if (!iapOperator || !username) {
-        return null;
-      }
       try {
-        const dataUrl = await iapOperator.getAvatar(username);
+        const dataUrl = await getAvatar(username);
         return dataUrl;
       } catch (error) {
         console.error("Failed to fetch avatar from IAPOperator:", error);
-        return null;
+        return paintFirstLetterAvatar(username || "");
       }
     },
   });

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { Profile, ProfileStatus } from "./types";
+import { DataURL, Profile, ProfileStatus } from "./types";
 import { PSKey, usePersistentStorage } from "./persistent";
+import { paintFirstLetterAvatar } from "./colors";
 
 export function getProfile(apiPrefix: string) {
   return fetch(`${apiPrefix}/profile`)
@@ -94,5 +95,44 @@ export function useLoginStatusPolling(apiPrefix: string, intervalMs: number) {
     }
   }
 
-  return { loggedIn, loggedInAs, err };
+  return {
+    loggedIn,
+    loggedInAs,
+    err,
+    clearLoggedInState: () => {
+      localStorage.removeItem(PSKey.HasLoggedIn);
+      localStorage.removeItem(PSKey.LoggedInAs);
+    },
+  };
+}
+
+function getDataURLFromBlob(blob: Blob): Promise<DataURL> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result as DataURL);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+export async function getAvatar(username: string): Promise<DataURL> {
+  const searchParams = new URLSearchParams();
+  searchParams.set("username", username);
+  const response = await fetch(`/api/profile/avatar?${searchParams}`);
+  const contentType = response.headers.get("Content-Type");
+  const isImageContent =
+    typeof contentType === "string" && contentType.startsWith("image/");
+
+  if (response.status >= 300 || response.status < 200 || !isImageContent) {
+    return paintFirstLetterAvatar(username);
+  }
+
+  try {
+    const blob = await response.blob();
+    const dataURL = await getDataURLFromBlob(blob);
+    return dataURL;
+  } catch (err) {
+    console.error("failed to get avatar DataURL, falling back to default");
+    return paintFirstLetterAvatar(username);
+  }
 }
