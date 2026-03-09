@@ -36,8 +36,9 @@ export function MessageComposer(props: {
   onFile?: (file: FileList) => void;
   onPhoto?: (photo: FileList) => void;
   supportAttachment?: boolean;
+  disabled?: boolean;
 }) {
-  const { onFile, onPhoto, supportAttachment } = props;
+  const { onFile, onPhoto, supportAttachment, disabled } = props;
   const [messageInput, setMessageInput] = useState<string>("");
 
   const doSend = () => {
@@ -119,6 +120,10 @@ export function MessageComposer(props: {
           onKeyDown={handleEnterKeyPress}
           onKeyUp={handleKeyUp}
           disableUnderline
+          disabled={disabled}
+          placeholder={
+            disabled ? "Waiting for data channel to be opened" : undefined
+          }
         />
         <Tooltip title="Send">
           <IconButton

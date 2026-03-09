@@ -122,7 +122,6 @@ function useWs(
 
   const [nodeId, setNodeId] = useState<string>("");
   const nodeIdRef = useRef<string>("");
-  const seqRef = useRef(0);
   const pingTxMapRef = useRef<Record<string, number>>({});
   const [rtt, setRtt] = useState<number | undefined>(undefined);
   const [lastSeq, setLastSeq] = useState<number | undefined>(undefined);
@@ -320,7 +319,6 @@ function useWs(
               sendWsMsg,
               logSource,
               audioCtxRef,
-              connTrackRef,
             );
           }
           const ent = connTrackRef.current[remoteNodeId];
@@ -763,6 +761,14 @@ function attachDCEventListeners(
       }
 
       sendFeedBackToDC(dc, 0);
+    } else if (dc.label === PredefinedDCLabel.Chat) {
+      setConnTrackStatus((prev) => ({
+        ...prev,
+        [remoteNodeId]: {
+          ...(prev[remoteNodeId] ?? {}),
+          readyToTalk: true,
+        },
+      }));
     }
   };
 
@@ -775,6 +781,14 @@ function attachDCEventListeners(
           return closeDCById(prev, remoteNodeId, dcId, undefined, undefined);
         });
       }
+    } else if (dc.label === PredefinedDCLabel.Chat) {
+      setConnTrackStatus((prev) => ({
+        ...prev,
+        [remoteNodeId]: {
+          ...(prev[remoteNodeId] ?? {}),
+          readyToTalk: false,
+        },
+      }));
     }
   };
 
@@ -917,7 +931,6 @@ function attachPeerConnectionEventListeners(
   sendWsMsg: (obj: any) => void,
   logId: string | undefined,
   audioCtxRef: RefObject<AudioContext | null>,
-  connTrackRef: RefObject<ConnTrack>,
 ) {
   const logSource = logId ? ` [${logId}]` : "";
 
@@ -929,13 +942,14 @@ function attachPeerConnectionEventListeners(
     );
   }
 
-  peerConnection.onconnectionstatechange = (ev) => {
-    console.log(
-      `[dbg]${logSource} connection state changed`,
-      ev,
-      "change to:",
-      peerConnection.connectionState,
-    );
+  peerConnection.onconnectionstatechange = () => {
+    setConnTrackStatus((prev) => ({
+      ...prev,
+      [remoteNodeId]: {
+        ...(prev[remoteNodeId] ?? {}),
+        connectionStatus: peerConnection.connectionState,
+      },
+    }));
   };
 
   // registering event handlers for peerconnection handle
@@ -1603,7 +1617,6 @@ export default function Home() {
         sendWsMsg,
         logSource,
         audioCtxRef,
-        connTrackRef,
       );
 
       ent.dataChannel = ent.peerConnection.createDataChannel(
@@ -1842,7 +1855,11 @@ export default function Home() {
     setMobileDrawerOpen(!mobileDrawerOpen);
   };
 
-  const dispUsername = loggedInAs?.displayName ?? loggedInAs?.username ?? "";
+  const dispUsername =
+    loggedInAs?.displayName ??
+    loggedInAs?.username ??
+    userPreferenceMap[nodeId ?? ""]?.name ??
+    "";
 
   const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
   const menuOpen = Boolean(menuAnchorEl);
@@ -1948,7 +1965,6 @@ export default function Home() {
                 <RenderPeerEntry
                   preferredColorIdx={preferredColorIdx}
                   conn={conn}
-                  avatarUrl={connTrackStatus?.[conn.node_id]?.avatarUrl}
                   key={conn.node_id}
                   activeNodeId={activeConn}
                   onSelect={() => {
@@ -1995,6 +2011,40 @@ export default function Home() {
     </Fragment>
   );
 
+  const topBar = (
+    <Paper
+      sx={{
+        flexShrink: 0,
+        padding: 1.5,
+        borderRadius: 0,
+        display: "flex",
+        alignItems: "center",
+        gap: 1,
+      }}
+    >
+      {isMobile && (
+        <IconButton onClick={handleDrawerToggle}>
+          <MenuIcon />
+        </IconButton>
+      )}
+      <RenderAvatar
+        username={activeConn ? userPreferenceMap[activeConn]?.name : ""}
+        size="small"
+        preferredColorIdx={
+          userPreferenceMap[activeConn]?.indexOfPreferColor ?? -1
+        }
+      />
+      {activeConn && (
+        <Box>
+          <Box>{connTrackStatus[activeConn]?.rtt ?? ""}</Box>
+          <Box>{connTrackStatus[activeConn]?.connectionStatus}</Box>
+        </Box>
+      )}
+
+      <Box>{activeConn ? userPreferenceMap[activeConn]?.name : ""}</Box>
+    </Paper>
+  );
+
   return (
     <Fragment>
       <Box sx={{ display: "flex", flexDirection: "row", height: "100vh" }}>
@@ -2022,30 +2072,7 @@ export default function Home() {
             onDragOver={onDragOver}
             onMouseOut={onMouseOut}
           >
-            <Paper
-              sx={{
-                flexShrink: 0,
-                padding: 1.5,
-                borderRadius: 0,
-                display: "flex",
-                alignItems: "center",
-                gap: 1,
-              }}
-            >
-              {isMobile && (
-                <IconButton onClick={handleDrawerToggle}>
-                  <MenuIcon />
-                </IconButton>
-              )}
-              <RenderAvatar
-                username={activeConn ? userPreferenceMap[activeConn]?.name : ""}
-                size="small"
-                preferredColorIdx={
-                  userPreferenceMap[activeConn]?.indexOfPreferColor ?? -1
-                }
-              />
-              <Box>{activeConn ? userPreferenceMap[activeConn]?.name : ""}</Box>
-            </Paper>
+            {topBar}
             {showDropArea ? (
               <Box
                 sx={{
@@ -2094,6 +2121,7 @@ export default function Home() {
                 </Box>
                 <Box sx={{ flexShrink: 0 }}>
                   <MessageComposer
+                    disabled={!connTrackStatus[activeConn]?.readyToTalk}
                     supportAttachment={
                       conns.find((conn) => conn.node_id === activeConn)?.entry
                         ?.attributes?.[
@@ -2203,6 +2231,7 @@ export default function Home() {
                   borderRadius: 0,
                   display: "flex",
                   alignItems: "center",
+                  gap: 1,
                 }}
               >
                 <IconButton onClick={handleDrawerToggle}>

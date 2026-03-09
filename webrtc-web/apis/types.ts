@@ -243,27 +243,17 @@ export type FileTransferStatusEntry = {
 };
 
 export type ConnTrackStatusEntry = {
-  // indicating lost the connection to the remote peer
-  disconnected?: boolean;
-
-  // connecting to the remote peer
-  connecting?: boolean;
-
-  // renegotiating with the remote peer (SDP offer/answer exchange in progress)
-  negotiating?: boolean;
-
-  // messages we sent to the remote peer and vice versa
   messages?: ChatMessage[];
-
-  // round trip time to the remote peer as measured by the client
+  connectionStatus?: RTCPeerConnectionState;
   rtt?: number;
 
   // key is the id of the data channel that actually transmit the file data,
   fileTransferStatus?: Record<string, FileTransferStatusEntry>;
 
-  avatarUrl?: string;
-
   queuedMessagePathOrders?: MessagePatchOrder[];
+
+  // this become true when data channel is open
+  readyToTalk?: boolean;
 };
 
 // key is the node_id of remote peer
