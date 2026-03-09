@@ -6,23 +6,96 @@ networks:
     enable_ipv4: false
     enable_ipv6: true
 services:
+  webtop1:
+    image: lscr.io/linuxserver/webtop:debian-kde
+    container_name: webtop1
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Etc/UTC
+      - PIXELFLUX_WAYLAND=true
+    networks:
+      - webrtc-chat
+    volumes:
+      - ./webtop-config:/config
+      - "./init-network.sh:/config/init-network.sh:ro"
+      - "./wireguard:/wireguard:ro"
+      - "./resolv.conf:/etc/resolv.conf:ro"
+    ports:
+      - "[::1]:3001:3001"
+    shm_size: "1gb"
+    restart: unless-stopped
+  webtop2:
+    image: lscr.io/linuxserver/webtop:debian-kde
+    container_name: webtop2
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Etc/UTC
+      - PIXELFLUX_WAYLAND=true
+    networks:
+      - webrtc-chat
+    volumes:
+      - ./webtop-config:/config
+    ports:
+      - "[::1]:3001:3001"
+    shm_size: "1gb"
+    restart: unless-stopped
   stun:
     container_name: webrtc-stun
-    image: webrtc-stun:latest
+    image: coturn/coturn:latest
     pull_policy: never
     networks:
       - "webrtc-chat"
+
+  agents:
+    container_name: webrtc-agents
+    image: webrtc-agents:latest
+    build:
+      context: "../../.."
+      dockerfile: "../../../webrtc-agents/Dockerfile"
+    pull_policy: never
+    networks:
+      - "webrtc-chat"
+    volumes:
+      - "./custom-ca/ca.pem:/custom-ca/ca.pem:ro"
+      - "./.env:/app/.env:ro"
+    working_dir: /app
+    command:
+      - "--chatbot-model=deepseek/deepseek-v3.2"
+      - "--ws-server=wss://chat.duststars.dn42/api/ws"
+      - "--ice-server=stun:webrtc-stun:3478"
+      - "--reconnect-on-disconnect"
+      - "--reconnect-delay=3s"
+      - "--openrouter-apikey-env=OPENROUTER_APIKEY"
+      - "--custom-ca=/custom-ca/ca.pem"
+      - "--prefer-ipv6=true"
+
   server:
     container_name: webrtc-server
     hostname: webrtc-server
+    build:
+      context: "../../../webrtc-server"
+      dockerfile: "../../../webrtc-server/Dockerfile"
     image: webrtc-server:latest
     pull_policy: never
+    volumes:
+      - "./.env:/app/.env:ro"
+      - "./kioubit-login-pubkey.pem"
+    command:
+      - "--allowed-origin=https://${MAIN_DOMAIN}"
+      - "--github-login-redir-url=http://${MAIN_DOMAIN}/api/github/login/auth"
+      - "--kioubit-login-redir-url=http://${MAIN_DOMAIN}/api/kioubit/login/auth"
+      - "--login-success-redir-url=http://${MAIN_DOMAIN}/"
+      - "--kioubit-login-pubkey=./kioubit-login-pubkey.pem"
+      - "--debug-true"
     networks:
       - "webrtc-chat"
   web:
     container_name: webrtc-web
     hostname: ${MAIN_HOSTNAME}
     image: webrtc-chat:latest
+    restart: unless-stopped
     pull_policy: never
     volumes:
       - "./nginx/conf.d/default.conf:/etc/nginx/conf.d/default.conf:ro"
