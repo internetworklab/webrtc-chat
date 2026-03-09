@@ -35,6 +35,7 @@ services:
       - PIXELFLUX_WAYLAND=true
     networks:
       - webrtc-client-1
+      - webrtc-client-3
     volumes:
       - "./webtop-config1:/config"
       # - "./resolv.conf:/etc/resolv.conf"
@@ -55,6 +56,7 @@ services:
       - PIXELFLUX_WAYLAND=true
     networks:
       - webrtc-client-2
+      - webrtc-client-3
     volumes:
       - "./webtop-config2:/config"
       # - "./resolv.conf:/etc/resolv.conf"
@@ -90,7 +92,7 @@ services:
     working_dir: /app
     command:
       - "--chatbot-model=deepseek/deepseek-v3.2"
-      - "--ws-server=wss://chat.duststars.dn42/api/ws"
+      - "--ws-server=wss://${MAIN_DOMAIN}/api/ws"
       - "--ice-server=stun:webrtc-stun:3478"
       - "--reconnect-on-disconnect"
       - "--reconnect-delay=3s"
@@ -119,7 +121,7 @@ services:
       - "webrtc-internal"
   web:
     container_name: webrtc-web
-    hostname: ${MAIN_HOSTNAME}
+    hostname: ${MAIN_DOMAIN}
     image: webrtc-chat:latest
     restart: unless-stopped
     pull_policy: never
