@@ -1,0 +1,13 @@
+Types: deb
+URIs: http://mirrors.ustc.edu.cn/debian
+Suites: trixie trixie-updates
+Components: main contrib non-free non-free-firmware
+Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+
+# Debian Security 源通常不建议使用镜像站，因为安全更新需要即时性
+# 如果仍然希望替换，可以取消下面的注释
+# Types: deb
+# URIs: http://mirrors.ustc.edu.cn/debian-security
+# Suites: trixie-security
+# Components: main contrib non-free non-free-firmware
+# Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg

@@ -17,7 +17,11 @@ services:
     networks:
       - webrtc-chat
     volumes:
-      - ./webtop-config1:/config
+      - "./webtop-config1:/config"
+      # - "./resolv.conf:/etc/resolv.conf"
+      - "./deb-source-overrides.sources:/etc/apt/sources.list.d/debian.sources:ro"
+      # note: you still have to run `sudo update-ca-certificates` after start up
+      - "./custom-ca/ca.pem:/usr/local/share/ca-certificates/ca.crt:ro"
     ports:
       - "[::1]:13001:3001"
     shm_size: "1gb"
@@ -33,13 +37,18 @@ services:
     networks:
       - webrtc-chat
     volumes:
-      - ./webtop-config2:/config
+      - "./webtop-config2:/config"
+      # - "./resolv.conf:/etc/resolv.conf"
+      - "./deb-source-overrides.sources:/etc/apt/sources.list.d/debian.sources:ro"
+      # note: you still have to run `sudo update-ca-certificates` after start up
+      - "./custom-ca/ca.pem:/usr/local/share/ca-certificates/ca.crt:ro"
     ports:
-      - "[::1]:3002:3001"
+      - "[::1]:13002:3001"
     shm_size: "1gb"
     restart: unless-stopped
   stun:
     container_name: webrtc-stun
+    hostname: ${STUN_HOSTNAME}
     image: coturn/coturn:latest
     pull_policy: never
     networks:
@@ -84,7 +93,7 @@ services:
       - "--kioubit-login-redir-url=http://${MAIN_DOMAIN}/api/kioubit/login/auth"
       - "--login-success-redir-url=http://${MAIN_DOMAIN}/"
       - "--kioubit-login-pubkey=./kioubit-login-pubkey.pem"
-      - "--debug-true"
+      - "--debug=true"
     networks:
       - "webrtc-chat"
   web:
