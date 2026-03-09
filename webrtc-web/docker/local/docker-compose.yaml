@@ -1,7 +1,26 @@
 name: webrtc-chat
 networks:
-  webrtc-chat:
-    name: "webrtc-chat"
+  # use for communication between web-proxy and backend server
+  webrtc-internal:
+    name: "webrtc-internal"
+    driver: bridge
+    enable_ipv4: false
+    enable_ipv6: true
+  # use for communication between client-1 and web-proxy
+  webrtc-client-1:
+    name: "webrtc-client-1"
+    driver: bridge
+    enable_ipv4: false
+    enable_ipv6: true
+  # use for communication between client-2 and web-proxy
+  webrtc-client-2:
+    name: "webrtc-client-2"
+    driver: bridge
+    enable_ipv4: false
+    enable_ipv6: true
+  # use for communication between client-3 (agents) and web-proxy
+  webrtc-client-3:
+    name: "webrtc-client-3"
     driver: bridge
     enable_ipv4: false
     enable_ipv6: true
@@ -15,7 +34,7 @@ services:
       - TZ=Etc/UTC
       - PIXELFLUX_WAYLAND=true
     networks:
-      - webrtc-chat
+      - webrtc-client-1
     volumes:
       - "./webtop-config1:/config"
       # - "./resolv.conf:/etc/resolv.conf"
@@ -35,7 +54,7 @@ services:
       - TZ=Etc/UTC
       - PIXELFLUX_WAYLAND=true
     networks:
-      - webrtc-chat
+      - webrtc-client-2
     volumes:
       - "./webtop-config2:/config"
       # - "./resolv.conf:/etc/resolv.conf"
@@ -52,7 +71,9 @@ services:
     image: coturn/coturn:latest
     pull_policy: never
     networks:
-      - "webrtc-chat"
+      - "webrtc-client-1"
+      - "webrtc-client-2"
+      - "webrtc-client-3"
 
   agents:
     container_name: webrtc-agents
@@ -62,7 +83,7 @@ services:
       dockerfile: "webrtc-agents/Dockerfile"
     pull_policy: never
     networks:
-      - "webrtc-chat"
+      - "webrtc-client-3"
     volumes:
       - "./custom-ca/ca.pem:/custom-ca/ca.pem:ro"
       - "./.env:/app/.env:ro"
@@ -79,7 +100,7 @@ services:
 
   server:
     container_name: webrtc-server
-    hostname: webrtc-server
+    hostname: webrtc-internal
     build:
       context: "./../../../webrtc-server"
     image: webrtc-server:latest
@@ -95,7 +116,7 @@ services:
       - "--kioubit-login-pubkey=./kioubit-login-pubkey.pem"
       - "--debug=true"
     networks:
-      - "webrtc-chat"
+      - "webrtc-internal"
   web:
     container_name: webrtc-web
     hostname: ${MAIN_HOSTNAME}
@@ -107,4 +128,7 @@ services:
       - "./cert.pem:/etc/nginx/certs/cert.pem:ro"
       - "./cert-key.pem:/etc/nginx/certs/cert-key.pem:ro"
     networks:
-      - "webrtc-chat"
+      - "webrtc-internal"
+      - "webrtc-client-1"
+      - "webrtc-client-2"
+      - "webrtc-client-3"
