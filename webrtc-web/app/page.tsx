@@ -137,8 +137,6 @@ function useWs(
       setConns(conns);
     });
 
-  const allWsConnsRef = useRef<WSConnRecord[]>([]);
-
   const sendWsMsg = (obj: any) => {
     try {
       let j = "";
@@ -160,10 +158,7 @@ function useWs(
   };
 
   const connect = (server: WSServer, preference: Preference | undefined) => {
-    if (allWsConnsRef.current.find((rec) => rec.serverId === server.id)) {
-      console.log(
-        `Server ${server.id} already has connection record, skipping for singleton.`,
-      );
+    if (wsRef.current) {
       return;
     }
     console.log("Connecting to ", server);
@@ -1537,7 +1532,7 @@ export default function Home() {
   const { preference, setPreference } = usePreference();
 
   // auto-connect at sever list loaded
-  useAutoconnect(pinnedserverObject, preference, connect);
+  useAutoconnect(pinnedserverObject, preference, connect, loggedInAs);
 
   const [activeConn, setActiveConn] = useState("");
   const [showPreferenceDialog, setShowPreferenceDialog] = useState(false);
@@ -1944,8 +1939,8 @@ export default function Home() {
           connecting={wsConnStatus === WSConnStatusShort.Connecting}
           preference={preference}
           onPreferenceChange={setPreference}
-          onPinServer={(pinnedServer, preference) => {
-            connect(pinnedServer, preference);
+          onPinServer={(pinnedServer, preference, loggedInAs) => {
+            connect(pinnedServer, loggedInAs ? undefined : preference);
             setPinnedServer(pinnedServer.id);
           }}
           servers={servers}

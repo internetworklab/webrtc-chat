@@ -1,6 +1,6 @@
 "use client";
 
-import { IDProvider, Preference, WSServer } from "@/apis/types";
+import { IDProvider, Preference, Profile, WSServer } from "@/apis/types";
 import {
   Box,
   TextField,
@@ -24,7 +24,11 @@ import { PSKey, usePersistentStorage } from "@/apis/persistent";
 // Select what signalling server to use
 export function ServerSelector(props: {
   servers: WSServer[];
-  onPinServer: (server: WSServer, preference: Preference | undefined) => void;
+  onPinServer: (
+    server: WSServer,
+    preference: Preference | undefined,
+    loggedInAs: Profile | undefined,
+  ) => void;
   connecting: boolean;
   onLogout: () => void;
   preference: Preference;
@@ -59,11 +63,29 @@ export function ServerSelector(props: {
     window.location.href = idp.loginUrl;
   };
 
+  const { isLoading: isLoginStatusLoading, data: profileStatusData } = useQuery(
+    {
+      queryKey: ["hasloggedin", selectedServerObj?.apiPrefix ?? ""],
+      queryFn: () => getProfileStatus(selectedServerObj?.apiPrefix ?? ""),
+    },
+  );
+
+  const { data: profileData, isLoading: isProfileDataLoading } = useQuery({
+    queryKey: ["profile", selectedServerObj?.apiPrefix ?? ""],
+    queryFn: () => getProfile(selectedServerObj?.apiPrefix ?? ""),
+  });
+
+  const hintText = getLoginStatusHintTxt(
+    profileStatusData?.logged_in,
+    profileData,
+  );
+  const idps = selectedServerObj?.idp ?? [];
+
   const handleConnect = () => {
     const server = servers.find((server) => server.id === selectedServerId);
-    if (server) {
+    if (server && !isProfileDataLoading) {
       // the app will automatically tries to connect to a pinned server
-      onPinServer(server, preference);
+      onPinServer(server, preference, profileData);
     }
   };
 
@@ -77,23 +99,6 @@ export function ServerSelector(props: {
       Connect
     </Button>
   );
-  const { isLoading: isLoginStatusLoading, data: profileStatusData } = useQuery(
-    {
-      queryKey: ["hasloggedin", selectedServerObj?.apiPrefix ?? ""],
-      queryFn: () => getProfileStatus(selectedServerObj?.apiPrefix ?? ""),
-    },
-  );
-
-  const { data: profileData } = useQuery({
-    queryKey: ["profile", selectedServerObj?.apiPrefix ?? ""],
-    queryFn: () => getProfile(selectedServerObj?.apiPrefix ?? ""),
-  });
-
-  const hintText = getLoginStatusHintTxt(
-    profileStatusData?.logged_in,
-    profileData,
-  );
-  const idps = selectedServerObj?.idp ?? [];
 
   return (
     <Box
@@ -133,73 +138,77 @@ export function ServerSelector(props: {
         </Box>
       </Box>
 
-      <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-        {isLoginStatusLoading ? (
-          <Box>Fetching login status ...</Box>
-        ) : profileStatusData?.logged_in ? (
-          <Fragment>
-            <Box>{hintText}</Box>
-            <Box>{connectBtn}</Box>
-            <Box>
-              <Button variant="outlined" fullWidth onClick={onLogout}>
-                Logout
-              </Button>
-            </Box>
-          </Fragment>
-        ) : (
+      {selectedServerObj && (
+        <Fragment>
           <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            {idps.map((idp) => (
-              <IdPLoginButton
-                key={idp.name}
-                idpContext={idp}
-                onClick={() => handleLoginClick(idp)}
-              />
-            ))}
+            {isLoginStatusLoading ? (
+              <Box>Fetching login status ...</Box>
+            ) : profileStatusData?.logged_in ? (
+              <Fragment>
+                <Box>{hintText}</Box>
+                <Box>{connectBtn}</Box>
+                <Box>
+                  <Button variant="outlined" fullWidth onClick={onLogout}>
+                    Logout
+                  </Button>
+                </Box>
+              </Fragment>
+            ) : (
+              <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                {idps.map((idp) => (
+                  <IdPLoginButton
+                    key={idp.name}
+                    idpContext={idp}
+                    onClick={() => handleLoginClick(idp)}
+                  />
+                ))}
+              </Box>
+            )}
           </Box>
-        )}
-      </Box>
-
-      {selectedServerObj?.allowAnonymous && !profileStatusData?.logged_in && (
-        <Box
-          sx={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 2,
-          }}
-        >
-          <Box>Or, Connect as a visitor:</Box>
-          <TextField
-            placeholder="Pick a username"
-            fullWidth
-            variant="standard"
-            value={preference?.name ?? ""}
-            onChange={(e) =>
-              onPreferenceChange((prev) => {
-                return {
-                  ...prev,
-                  name: e.target.value,
-                };
-              })
-            }
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                e.stopPropagation();
-                handleConnect();
-              }
-            }}
-          />
-          <Box
-            sx={{
-              display: "flex",
-              justifyContent: "center",
-              marginTop: "2",
-              gridColumn: "1 / span 2",
-            }}
-          >
-            {connectBtn}
-          </Box>
-        </Box>
+          {selectedServerObj?.allowAnonymous &&
+            !profileStatusData?.logged_in && (
+              <Box
+                sx={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 2,
+                }}
+              >
+                <Box>Or, Connect as a visitor:</Box>
+                <TextField
+                  placeholder="Pick a username"
+                  fullWidth
+                  variant="standard"
+                  value={preference?.name ?? ""}
+                  onChange={(e) =>
+                    onPreferenceChange((prev) => {
+                      return {
+                        ...prev,
+                        name: e.target.value,
+                      };
+                    })
+                  }
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleConnect();
+                    }
+                  }}
+                />
+                <Box
+                  sx={{
+                    display: "flex",
+                    justifyContent: "center",
+                    marginTop: "2",
+                    gridColumn: "1 / span 2",
+                  }}
+                >
+                  {connectBtn}
+                </Box>
+              </Box>
+            )}
+        </Fragment>
       )}
     </Box>
   );
