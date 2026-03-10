@@ -24,6 +24,7 @@ import {
   MessagePatchesMap,
   WSConnStatusShort,
 } from "@/apis/types";
+import { useAutoconnect } from "@/apis/autoconnect";
 import { ChangePreference } from "@/components/ChangePreference";
 import {
   Box,
@@ -85,6 +86,8 @@ const pingIntvMs = 1000;
 const defaultFileSegmentSize = 128 * 1024;
 const defaultMsgTimeoutMs = 3000;
 const defaultFileDCBufferAmountThreshold = 4 * 1024 * 1024;
+const pollingIntvMs = 3000;
+const reconnectDelayMs = 3000;
 
 function makeConnTrackEntry(iceServers: string[]): ConnTrackEntry {
   console.debug("[dbg] making RTCPeerConnection, iceServers:", iceServers);
@@ -223,7 +226,7 @@ function useWs(
         console.log("Disconnected, will reconnect later");
         setTimeout(() => {
           connect(server, preference);
-        }, 3000);
+        }, reconnectDelayMs);
       }
     };
     ws.onerror = (error) => {
@@ -1510,7 +1513,7 @@ export default function Home() {
   const selectedserverObject = pinnedserverObject;
   const { loggedIn, loggedInAs, clearLoggedInState } = useLoginStatusPolling(
     selectedserverObject?.apiPrefix || "",
-    3000,
+    pollingIntvMs,
   );
 
   const {
@@ -1532,6 +1535,10 @@ export default function Home() {
     : undefined;
 
   const { preference, setPreference } = usePreference();
+
+  // auto-connect at sever list loaded
+  useAutoconnect(pinnedserverObject, preference, connect);
+
   const [activeConn, setActiveConn] = useState("");
   const [showPreferenceDialog, setShowPreferenceDialog] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
@@ -1938,8 +1945,8 @@ export default function Home() {
           preference={preference}
           onPreferenceChange={setPreference}
           onPinServer={(pinnedServer, preference) => {
-            setPinnedServer(pinnedServer.id);
             connect(pinnedServer, preference);
+            setPinnedServer(pinnedServer.id);
           }}
           servers={servers}
         />
