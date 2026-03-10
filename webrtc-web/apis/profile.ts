@@ -124,7 +124,7 @@ export async function getAvatar(username: string): Promise<DataURL> {
     typeof contentType === "string" && contentType.startsWith("image/");
 
   if (response.status >= 300 || response.status < 200 || !isImageContent) {
-    return paintFirstLetterAvatar(username);
+    throw new Error("failed to get avatar DataURL, falling back to default");
   }
 
   try {

@@ -49,3 +49,24 @@ export function ConnStatusDisplay(props: {
     </Tooltip>
   );
 }
+
+export function convertRTCPeerConnStatus(
+  rtcStatus: RTCPeerConnectionState | undefined | null,
+): WSConnStatusShort {
+  if (rtcStatus === undefined || rtcStatus === null) {
+    return WSConnStatusShort.Unknown;
+  }
+  if (rtcStatus === "connected") {
+    return WSConnStatusShort.Online;
+  } else if (rtcStatus === "connecting") {
+    return WSConnStatusShort.Connecting;
+  } else if (
+    rtcStatus === "closed" ||
+    rtcStatus === "disconnected" ||
+    rtcStatus === "failed"
+  ) {
+    return WSConnStatusShort.Offline;
+  } else {
+    return WSConnStatusShort.Unknown;
+  }
+}

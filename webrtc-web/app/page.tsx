@@ -37,6 +37,7 @@ import {
   useMediaQuery,
   useTheme,
   Menu,
+  Typography,
 } from "@mui/material";
 import {
   Dispatch,
@@ -75,11 +76,15 @@ import {
   setupWsPing,
 } from "@/apis/ping";
 import { PSKey, usePersistentStorage } from "@/apis/persistent";
-import { ConnStatusDisplay } from "@/components/ConnStatusDisplay";
+import {
+  ConnStatusDisplay,
+  convertRTCPeerConnStatus,
+} from "@/components/ConnStatusDisplay";
 import { useLoginStatusPolling } from "@/apis/profile";
 import { useQuery } from "@tanstack/react-query";
 import { logout } from "@/apis/logout";
 import { usePreference } from "@/apis/preference";
+import { FormatRTT } from "@/components/FormatRTT";
 
 const pingTimeoutMs = 3000;
 const pingIntvMs = 1000;
@@ -1965,21 +1970,31 @@ export default function Home() {
           <MenuIcon />
         </IconButton>
       )}
-      <RenderAvatar
-        username={activeConn ? (userPreferenceMap[activeConn]?.name ?? "") : ""}
-        size="small"
-        preferredColorIdx={
-          userPreferenceMap[activeConn]?.indexOfPreferColor ?? -1
-        }
-      />
       {activeConn && (
-        <Box>
-          <Box>{connTrackStatus[activeConn]?.rtt ?? ""}</Box>
-          <Box>{connTrackStatus[activeConn]?.connectionStatus}</Box>
-        </Box>
+        <Fragment>
+          <RenderAvatar
+            username={userPreferenceMap[activeConn]?.name ?? ""}
+            size="small"
+            preferredColorIdx={
+              userPreferenceMap[activeConn]?.indexOfPreferColor
+            }
+          />
+          <Box>{userPreferenceMap[activeConn]?.name ?? ""}</Box>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            <ConnStatusDisplay
+              connStatus={convertRTCPeerConnStatus(
+                connTrackStatus[activeConn]?.connectionStatus,
+              )}
+              colorCodes={undefined}
+            />
+            {connTrackStatus[activeConn]?.connectionStatus === "connected" && (
+              <Typography variant="caption" gutterBottom={false}>
+                <FormatRTT rtt={connTrackStatus[activeConn]?.rtt} />
+              </Typography>
+            )}
+          </Box>
+        </Fragment>
       )}
-
-      <Box>{activeConn ? userPreferenceMap[activeConn]?.name : ""}</Box>
     </Paper>
   );
 

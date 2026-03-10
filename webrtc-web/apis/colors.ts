@@ -18,18 +18,24 @@ export const PRESET_COLORS: ColorToken[] = [
   { light: "#FFCC80", dark: "#FF9800" }, // Orange
 ];
 
-export function getColorTokenHashFromUsername(username: string): number {
+export function getColorTokenHashFromUsername(
+  username: string,
+  N: number,
+): number {
   let hash = 0;
   for (let i = 0; i < username.length; i++) {
     const char = username.charCodeAt(i);
     hash = (hash << 5) - hash + char;
     hash = hash & hash; // Convert to 32bit integer
   }
-  return Math.abs(hash) % PRESET_COLORS.length;
+  return Math.abs(hash) % N;
 }
 
 export function paintFirstLetterAvatar(username: string): DataURL {
-  const colorTokenIdx = getColorTokenHashFromUsername(username);
+  const colorTokenIdx = getColorTokenHashFromUsername(
+    username,
+    PRESET_COLORS.length,
+  );
   const colorToken = PRESET_COLORS[colorTokenIdx % PRESET_COLORS.length];
   const bgColor = colorToken.dark;
   const fgColor = "#fff";

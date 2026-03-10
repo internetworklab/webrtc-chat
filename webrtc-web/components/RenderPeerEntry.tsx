@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  ChatMessage,
-  ChatMessageFile,
-  ChatMessageFileCategory,
-  ConnEntry,
-  ConnTrackStatus,
-  ConnTrackStatusEntry,
-} from "@/apis/types";
+import { ChatMessage, ChatMessageFileCategory, ConnEntry } from "@/apis/types";
 import { Badge, Box, MenuItem, Typography } from "@mui/material";
 import { RenderAvatar } from "./RenderAvatar";
 
@@ -45,7 +38,6 @@ export function RenderPeerEntry(props: {
   preferredColorIdx?: number;
   activeNodeId: string;
   onSelect: () => void;
-  rtt?: number;
   latestUnreadMessage?: ChatMessage;
   numUnreads?: number;
 }) {
@@ -53,7 +45,6 @@ export function RenderPeerEntry(props: {
     conn,
     activeNodeId,
     onSelect,
-    rtt,
     latestUnreadMessage,
     numUnreads,
     preferredColorIdx,

@@ -4,15 +4,18 @@ import { Box } from "@mui/material";
 import { getPreferredColor } from "./ChangePreference";
 import { useQuery } from "@tanstack/react-query";
 import { getAvatar } from "@/apis/profile";
-import { paintFirstLetterAvatar } from "@/apis/colors";
+import {
+  getColorTokenHashFromUsername,
+  paintFirstLetterAvatar,
+  PRESET_COLORS,
+} from "@/apis/colors";
 
 export function RenderAvatar(props: {
   username: string;
-  url?: string;
   size?: "default" | "small" | "large";
   preferredColorIdx?: number | string;
 }) {
-  const { username, url, size = "default", preferredColorIdx } = props;
+  const { username, size = "default" } = props;
   const firstCap =
     username && username.length > 0 ? username[0].toUpperCase() : "";
 
@@ -30,6 +33,10 @@ export function RenderAvatar(props: {
 
   let bgColorUsedLight: string = "orange";
   let bgColorUsedDark: string = "orange";
+  const preferredColorIdx =
+    props.preferredColorIdx === undefined || props.preferredColorIdx === null
+      ? getColorTokenHashFromUsername(username, PRESET_COLORS.length)
+      : props.preferredColorIdx;
 
   const colorToken = getPreferredColor(preferredColorIdx);
   bgColorUsedLight = colorToken.light;
