@@ -2,8 +2,10 @@ package main
 
 import (
 	"log"
+	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"slices"
 	"time"
 
@@ -31,6 +33,7 @@ type CLI struct {
 	Debug                     bool          `name:"debug" help:"Toggle this to make it print extra verbose logs in stdout" default:"false"`
 	LoginSuccessRedirectURL   string        `name:"login-success-redir-url" help:"The page to which the user will be redirect to once oauth login is successful, this usually should be the home page for a typical SPA web app" default:"http://localhost:3000/"`
 	KioubitLoginPubkey        string        `name:"kioubit-login-pubkey" help:"The path to the PEM pubkey file in order to use the Sign in with Kioubit service, this is optional"`
+	ManagementListenAddress   string        `name:"management-listen" help:"Unix domain socket path listener of management API" default:"/var/run/webrtc-server/management.sock"`
 }
 
 var cli CLI
@@ -140,6 +143,46 @@ func main() {
 	if cli.InjectAllowAllCorsHeaders {
 		server.Handler = pkghandler.WithCORSAllowAny(server.Handler)
 	}
+	// Start management listener on Unix domain socket if configured
+	if mngListen := cli.ManagementListenAddress; mngListen != "" {
+		// Create any parent directories needed
+		socketDir := filepath.Dir(mngListen)
+		if socketDir != "" && socketDir != "." {
+			if err := os.MkdirAll(socketDir, 0755); err != nil {
+				log.Fatalf("Failed to create management socket directory: %v", err)
+			}
+		}
+
+		// Remove the socket file if it already exists
+		if mngListen != "/" {
+			os.Remove(mngListen)
+		}
+
+		mgmtListener, err := net.Listen("unix", mngListen)
+		if err != nil {
+			log.Fatalf("Failed to create management listener: %v", err)
+		}
+
+		mgmtMuxHandler := http.NewServeMux()
+
+		botsHandler := &pkghandler.BotsManagementHandler{
+			UserManager: userMgr,
+			JWTManager:  nil, // todo: implement a JWT Manager
+		}
+		mgmtMuxHandler.Handle("/bots/", botsHandler)
+
+		mgmtServer := &http.Server{
+			Handler: mgmtMuxHandler,
+		}
+
+		go func() {
+			log.Printf("Starting management server on %s", mngListen)
+			if err := mgmtServer.Serve(mgmtListener); err != nil && err != http.ErrServerClosed {
+				log.Printf("Management server error: %v", err)
+			}
+		}()
+	}
+
 	log.Printf("Starting server on %s", cli.ListenAddr)
 	server.ListenAndServe()
 }

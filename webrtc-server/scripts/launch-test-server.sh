@@ -10,4 +10,5 @@ go run ./main.go \
   --kioubit-login-redir-url=http://localhost:3000/api/kioubit/login/auth \
   --login-success-redir-url=http://localhost:3000/ \
   --kioubit-login-pubkey=./kioubit-login-pubkey.pem \
+  --management-listen="$(pwd)/management/management.sock" \
   --debug=true
