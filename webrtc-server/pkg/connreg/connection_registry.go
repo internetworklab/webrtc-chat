@@ -89,8 +89,14 @@ const WellKnownAttributePreferColorIdx = "preferred_color"
 type AuthenticationType string
 
 const (
-	AuthenticationTypeJWT  AuthenticationType = "jwt"
-	AuthenticationTypeMTLS AuthenticationType = "mtls"
+	// No valid authentication information can be found in the request
+	AuthenticationTypeNone AuthenticationType = "none"
+
+	// The request presented a valid jwt, and a valid user id can be decoded from that jwt
+	AuthenticationTypeJWT AuthenticationType = "jwt"
+
+	// The request presented a valid session id in the cookie, and an exist user id is associated with that session id
+	AuthenticationTypeSession AuthenticationType = "session"
 )
 
 type ConnRegistryData struct {
@@ -165,7 +171,7 @@ func (cr *ConnRegistry) CloseConnection(key string) {
 	cr.datastore.Delete(key)
 }
 
-func (cr *ConnRegistry) Register(key string, payload RegisterPayload, claims jwt.MapClaims, wsConn *ws_proxy.WebsocketWriteProxy) error {
+func (cr *ConnRegistry) Register(key string, payload RegisterPayload, authType AuthenticationType, wsConn *ws_proxy.WebsocketWriteProxy) error {
 	log.Printf("Registering connection from %s, node name: %s", key, payload.NodeName)
 
 	_, found := cr.datastore.Get(key, func(valany interface{}) error {
@@ -177,12 +183,7 @@ func (cr *ConnRegistry) Register(key string, payload RegisterPayload, claims jwt
 		entry.NodeName = &payload.NodeName
 		entry.RegisteredAt = &now
 		entry.WSConn = wsConn
-		if claims != nil {
-			entry.Claims = claims
-			entry.Authentication = AuthenticationTypeJWT
-		} else {
-			entry.Authentication = AuthenticationTypeMTLS
-		}
+		entry.Authentication = authType
 
 		return nil
 	})

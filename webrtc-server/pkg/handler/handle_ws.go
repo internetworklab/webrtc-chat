@@ -60,32 +60,43 @@ func (handler *WebsocketHandler) getDefaultUserName(numId int) string {
 	return fmt.Sprintf("user%04d", numId)
 }
 
-func (handler *WebsocketHandler) getLoggedInAs(r *http.Request) *pkguser.User {
+// Note: *pkguser.User still could be nil (because no user is found in the store)
+func (handler *WebsocketHandler) getLoggedInAs(r *http.Request) (*pkguser.User, pkgconnreg.AuthenticationType) {
 	ctx := r.Context()
+
+	if userId := ctx.Value(CtxSessionKeyUserIdFromJWT); userId != nil {
+		userObj, err := handler.UserManager.GetUserById(ctx, userId.(string))
+		if err != nil {
+			log.New(os.Stderr, "", 0).Printf("Failed to get user by id: %v", err)
+			return nil, pkgconnreg.AuthenticationTypeNone
+		}
+		return userObj, pkgconnreg.AuthenticationTypeJWT
+	}
+
 	sessId := ctx.Value(CtxSessionKeySessionId)
 	if sessId == nil {
-		return nil
+		return nil, pkgconnreg.AuthenticationTypeNone
 	}
 
 	userId, err := handler.UserSessionManager.GetUserIdBySessionId(ctx, sessId.(string))
 	if err != nil {
-		return nil
+		return nil, pkgconnreg.AuthenticationTypeNone
 	}
 
 	if userId == "" {
-		return nil
+		return nil, pkgconnreg.AuthenticationTypeNone
 	}
 
 	userObj, err := handler.UserManager.GetUserById(ctx, userId)
 	if err != nil {
 		log.New(os.Stderr, "", 0).Printf("Failed to get user by id: %v", err)
-		return nil
+		return nil, pkgconnreg.AuthenticationTypeNone
 	}
 
-	return userObj
+	return userObj, pkgconnreg.AuthenticationTypeSession
 }
 
-func (handler *WebsocketHandler) handleTextMessage(key string, conn *ws_proxy.WebsocketWriteProxy, msg []byte, numId int, loggedInAs *pkguser.User) error {
+func (handler *WebsocketHandler) handleTextMessage(key string, conn *ws_proxy.WebsocketWriteProxy, msg []byte, numId int, loggedInAs *pkguser.User, authType pkgconnreg.AuthenticationType) error {
 	cr := handler.ConnectionRegistry
 	if cr == nil {
 		return fmt.Errorf("connection registry is not set")
@@ -104,7 +115,7 @@ func (handler *WebsocketHandler) handleTextMessage(key string, conn *ws_proxy.We
 		if payload.Register.NodeName == "" {
 			payload.Register.NodeName = handler.getDefaultUserName(numId)
 		}
-		cr.Register(key, *payload.Register, nil, conn)
+		cr.Register(key, *payload.Register, authType, conn)
 		responsePayload := pkgframing.MessagePayload{
 			Online: &pkgconnreg.NodeGoesOnline{
 				NodeId: key,
@@ -173,7 +184,7 @@ func (handler *WebsocketHandler) handleTextMessage(key string, conn *ws_proxy.We
 }
 
 func (h *WebsocketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	loggedInAs := h.getLoggedInAs(r)
+	loggedInAs, authType := h.getLoggedInAs(r)
 
 	upgrader := h.Upgrader
 	cr := h.ConnectionRegistry
@@ -229,7 +240,7 @@ func (h *WebsocketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 			switch msgType {
 			case websocket.TextMessage:
-				if err := h.handleTextMessage(remoteKey, connProxy, msg, numId, loggedInAs); err != nil {
+				if err := h.handleTextMessage(remoteKey, connProxy, msg, numId, loggedInAs, authType); err != nil {
 					log.Printf("Failed to handle text message from %s: %v", remoteKey, err)
 					continue
 				}

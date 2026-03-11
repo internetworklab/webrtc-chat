@@ -12,7 +12,7 @@ import (
 
 type JWTManager interface {
 	Issue(ctx context.Context, userid string) (string, error)
-	Validate(ctx context.Context, token string) (bool, error)
+	Validate(ctx context.Context, token string) (bool, jwt.Claims, error)
 }
 
 const defaultSecretLengthBytes int = 32
@@ -44,14 +44,14 @@ func (m *SimpleJWTManager) Issue(ctx context.Context, userid string) (string, er
 	return token.SignedString(m.secret)
 }
 
-func (m *SimpleJWTManager) Validate(ctx context.Context, tokenString string) (bool, error) {
+func (m *SimpleJWTManager) Validate(ctx context.Context, tokenString string) (bool, jwt.Claims, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &jwt.RegisteredClaims{}, func(token *jwt.Token) (interface{}, error) {
 		return m.secret, nil
 	})
 
 	if err != nil {
-		return false, err
+		return false, nil, err
 	}
 
-	return token.Valid, nil
+	return token.Valid, token.Claims, nil
 }

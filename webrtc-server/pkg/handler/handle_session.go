@@ -5,12 +5,6 @@ import (
 	"net/http"
 )
 
-type CtxSessionKey string
-
-const (
-	CtxSessionKeySessionId CtxSessionKey = "sessionId"
-)
-
 type SessionManager interface {
 	// If no associated is found with such request, returns an empty string
 	// otherwise returns a session identifier (which is opaque to the user)

@@ -1,11 +1,14 @@
 package handler
 
 import (
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	pkglogin "example.com/webrtcserver/pkg/models/login"
 	pkguser "example.com/webrtcserver/pkg/models/user"
@@ -167,6 +170,35 @@ func (h *ProfileAvatarHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 	h.serveUserAvatar(w, userObj)
 }
 
+var ErrUnsupportedMIME = errors.New("unsupported MIME type")
+
+// only recognizes:
+// data:image/jpeg;base64,<data>
+// data:image/png;base64,<data>
+// data:image/webp;base64,<data>
+// returns: MIME, binary blob, error
+func (h *ProfileAvatarHandler) parseB64DataURL(dataURLOrURL string) (string, []byte, error) {
+	if afterData, found := strings.CutPrefix("data:", dataURLOrURL); found {
+		supportedMIMETypes := []string{
+			"image/jpeg",
+			"image/png",
+			"image/webp",
+		}
+		for _, mime := range supportedMIMETypes {
+			if afterMIME, found := strings.CutPrefix(afterData, mime); found {
+				if afterB64, found := strings.CutPrefix(afterMIME, "base64,"); found {
+					blob, err := base64.StdEncoding.DecodeString(strings.TrimSpace(afterB64))
+					return mime, blob, err
+				}
+				return "", nil, errors.New("not base64 encoded")
+			}
+		}
+		return "", nil, ErrUnsupportedMIME
+	} else {
+		return "", nil, nil
+	}
+}
+
 func (h *ProfileAvatarHandler) serveUserAvatar(w http.ResponseWriter, userObj *pkguser.User) {
 	if userObj == nil {
 		w.WriteHeader(http.StatusUnauthorized)
@@ -177,6 +209,20 @@ func (h *ProfileAvatarHandler) serveUserAvatar(w http.ResponseWriter, userObj *p
 	if userObj.AvatarURL == "" {
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(&ErrResponse{Err: "No avatar URL found"})
+		return
+	}
+
+	mime, blob, err := h.parseB64DataURL(userObj.AvatarURL)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(&ErrResponse{Err: err.Error()})
+		return
+	}
+	if mime != "" {
+		w.Header().Set("Content-Type", mime)
+		if _, err := w.Write(blob); err != nil {
+			log.New(os.Stderr, "", 0).Printf("Cant write avatar response: %v", err)
+		}
 		return
 	}
 
