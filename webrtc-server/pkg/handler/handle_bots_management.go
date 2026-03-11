@@ -34,19 +34,7 @@ func (h *BotsManagementHandler) parseUserCreationPayload(r *http.Request) (*pkgu
 			return nil, fmt.Errorf("invalid JSON body: %w", err)
 		}
 		return &payload, nil
-	case "application/x-www-form-urlencoded":
-		if err := r.ParseForm(); err != nil {
-			return nil, fmt.Errorf("invalid form data: %w", err)
-		}
-		return &pkguser.UserCreationPayload{
-			Username:    r.FormValue(FormFieldUsername),
-			DisplayName: r.FormValue(FormFieldDisplayName),
-			AvatarURL:   r.FormValue(FormFieldAvatarURL),
-		}, nil
 	case "multipart/form-data":
-		if err := r.ParseMultipartForm(32 << 20); err != nil {
-			return nil, fmt.Errorf("invalid multipart form data: %w", err)
-		}
 		return &pkguser.UserCreationPayload{
 			Username:    r.FormValue(FormFieldUsername),
 			DisplayName: r.FormValue(FormFieldDisplayName),
