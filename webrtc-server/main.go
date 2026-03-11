@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"log"
 	"net"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 	pkghandler "example.com/webrtcserver/pkg/handler"
 	pkglogin "example.com/webrtcserver/pkg/models/login"
 	pkguser "example.com/webrtcserver/pkg/models/user"
+	pkgmyjwt "example.com/webrtcserver/pkg/my_jwt"
 	pkgsafemap "example.com/webrtcserver/pkg/safemap"
 	pkgsession "example.com/webrtcserver/pkg/session"
 
@@ -136,13 +138,23 @@ func main() {
 	})
 
 	sessMngr := &pkgsession.CookieSessionManager{}
+	tokenMngr := pkgmyjwt.NewSimpleJWTManager(nil)
+	if tokenMngr == nil {
+		log.Fatal(errors.New("failed to initialize token manager"))
+	}
+
+	var muxHandler http.Handler = mux
+	muxHandler = pkghandler.WithJWTHandler(muxHandler, tokenMngr)
+	muxHandler = pkghandler.WithSessionHandler(muxHandler, sessMngr)
+
 	server := &http.Server{
 		Addr:    cli.ListenAddr,
-		Handler: pkghandler.WithSessionHandler(mux, sessMngr),
+		Handler: muxHandler,
 	}
 	if cli.InjectAllowAllCorsHeaders {
 		server.Handler = pkghandler.WithCORSAllowAny(server.Handler)
 	}
+
 	// Start management listener on Unix domain socket if configured
 	if mngListen := cli.ManagementListenAddress; mngListen != "" {
 		// Create any parent directories needed
@@ -167,7 +179,7 @@ func main() {
 
 		botsHandler := &pkghandler.BotsManagementHandler{
 			UserManager: userMgr,
-			JWTManager:  nil, // todo: implement a JWT Manager
+			JWTManager:  tokenMngr,
 		}
 		mgmtMuxHandler.Handle("/bots/", botsHandler)
 
