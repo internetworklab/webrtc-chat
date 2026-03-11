@@ -75,12 +75,16 @@ services:
       context: "./../../../"
       dockerfile: "webrtc-agents/Dockerfile"
     pull_policy: never
+    entrypoint: /app/entrypoint.sh
     networks:
       - webrtc-chat
     volumes:
+      - "./bots_entrypoint.sh:/entrypoint.sh:ro"
       - "./custom-ca/ca.pem:/custom-ca/ca.pem:ro"
       - "./.env:/app/.env:ro"
     working_dir: /app
+    depends_on:
+      - server
     command:
       - "--chatbot-model=deepseek/deepseek-v3.2"
       - "--ws-server=wss://${MAIN_DOMAIN}/api/ws"
@@ -90,6 +94,7 @@ services:
       - "--openrouter-apikey-env=OPENROUTER_APIKEY"
       - "--custom-ca=/custom-ca/ca.pem"
       - "--prefer-ipv6=true"
+      - "--bots-secret-env-file=.env.bots"
 
   server:
     container_name: webrtc-server

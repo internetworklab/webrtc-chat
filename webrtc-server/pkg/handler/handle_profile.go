@@ -176,6 +176,7 @@ var ErrUnsupportedMIME = errors.New("unsupported MIME type")
 // data:image/jpeg;base64,<data>
 // data:image/png;base64,<data>
 // data:image/webp;base64,<data>
+// data:image/svg+xml;base64,<data>
 // returns: MIME, binary blob, error
 func (h *ProfileAvatarHandler) parseB64DataURL(dataURLOrURL string) (string, []byte, error) {
 	if afterData, found := strings.CutPrefix("data:", dataURLOrURL); found {
@@ -183,6 +184,7 @@ func (h *ProfileAvatarHandler) parseB64DataURL(dataURLOrURL string) (string, []b
 			"image/jpeg",
 			"image/png",
 			"image/webp",
+			"image/svg+xml",
 		}
 		for _, mime := range supportedMIMETypes {
 			if afterMIME, found := strings.CutPrefix(afterData, mime); found {

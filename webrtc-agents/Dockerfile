@@ -57,6 +57,8 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
     libopus0 \
     libopusfile0 \
     ca-certificates \
+    curl \
+    jq \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

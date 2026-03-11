@@ -34,6 +34,7 @@ type CLI struct {
 	ChatBotModel          string        `name:"chatbot-model" help:"The id of the model use for chatbot"`
 	CustomResolver        string        `name:"custom-resolver" help:"Use specified resolver instead of system's default resolver, example like [fd42:d42:d42:54::1]:53 or 172.20.0.53"`
 	PreferIPv6            bool          `name:"prefer-ipv6" help:"Use IPv6-only"`
+	BotsEnvFile           string        `name:"bots-secret-env-file" help:"When presented, ENVs defined in this file will be read to enable the bots authenticate themselves to the server." default:".env.bots"`
 }
 
 func (cli *CLI) getCustomResolver() *net.Resolver {
@@ -108,7 +109,15 @@ func main() {
 
 	var tlsConfig *tls.Config = cli.getTLSConfig()
 
+	if botsEnvPath := cli.BotsEnvFile; botsEnvPath != "" {
+		log.Printf("Loading %s", botsEnvPath)
+		if err := godotenv.Load(botsEnvPath); err != nil {
+			log.Fatalln("Failed to load env", botsEnvPath, err)
+		}
+	}
+
 	// Load .env file if it exists (ignore error if file doesn't exist)
+	log.Printf("Loading default .env file for ENVs")
 	if err := godotenv.Load(); err != nil {
 		log.Println("No .env file found or error loading .env file, continuing with existing environment variables")
 	}
@@ -119,7 +128,7 @@ func main() {
 		log.Fatal("Failed to parse WebSocket URL:", err)
 	}
 
-	getWsRunnerByDerivedCfg := func(nodeName string) *pkgwsrunner.WebSocketRunner {
+	getWsRunnerByDerivedCfg := func(nodeName string, jwtEnvName string) *pkgwsrunner.WebSocketRunner {
 		return &pkgwsrunner.WebSocketRunner{
 			URL:                   *u,
 			PingIntv:              cli.PingPeriod,
@@ -130,6 +139,7 @@ func main() {
 			Resolver:              resolverUsed,
 			TLSConfig:             tlsConfig,
 			PreferIPv6:            cli.PreferIPv6,
+			JWTEnvName:            jwtEnvName,
 		}
 	}
 
@@ -137,9 +147,9 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	var echoBotHandler pkghandlers.GenericWebRTCHandler
-	echoBotHandler = pkghandlers.NewSignallingHandler(pkghandlers.WithPingHandler(&pkghandlers.EchoDCHandler{}), cli.ICEServer, cli.Debug, nil)
-	echoBotRunner := getWsRunnerByDerivedCfg("EchoBot")
+	echoBotDCHandler := pkghandlers.WithPingHandler(&pkghandlers.EchoDCHandler{})
+	echoBotHandler := pkghandlers.NewSignallingHandler(echoBotDCHandler, cli.ICEServer, cli.Debug, nil)
+	echoBotRunner := getWsRunnerByDerivedCfg("EchoBot", "ECHOBOT_JWT_TOKEN")
 	go echoBotRunner.Run(ctx, echoBotHandler)
 	log.Println("Echo bot started!")
 
@@ -188,19 +198,19 @@ func main() {
 		log.Fatalf("Failed to create track data channel handler: %v", err)
 	}
 	musicBotHandler = pkghandlers.NewSignallingHandler(pkghandlers.WithPingHandler(trackDCHandler), cli.ICEServer, cli.Debug, api)
-	musicBotRunner := getWsRunnerByDerivedCfg("MusicBot")
+	musicBotRunner := getWsRunnerByDerivedCfg("MusicBot", "MUSICBOT_JWT_TOKEN")
 	go musicBotRunner.Run(ctx, musicBotHandler)
 	log.Println("Music bot started!")
 
 	var counterBotHandler pkghandlers.GenericWebRTCHandler
 	counterBotHandler = pkghandlers.NewSignallingHandler(pkghandlers.WithPingHandler(pkghandlers.NewCounterDCHandler()), cli.ICEServer, cli.Debug, nil)
-	counterBotRunner := getWsRunnerByDerivedCfg("CounterBot")
+	counterBotRunner := getWsRunnerByDerivedCfg("CounterBot", "COUNTERBOT_JWT_TOKEN")
 	go counterBotRunner.Run(ctx, counterBotHandler)
 	log.Println("Counter bot started!")
 
 	var clockBotHandler pkghandlers.GenericWebRTCHandler
 	clockBotHandler = pkghandlers.NewSignallingHandler(pkghandlers.WithPingHandler(pkghandlers.NewClockBotDCHandler()), cli.ICEServer, cli.Debug, nil)
-	clockBotRunner := getWsRunnerByDerivedCfg("ClockBot")
+	clockBotRunner := getWsRunnerByDerivedCfg("ClockBot", "CLOCKBOT_JWT_TOKEN")
 	go clockBotRunner.Run(ctx, clockBotHandler)
 	log.Println("Clock bot started!")
 
@@ -214,7 +224,7 @@ func main() {
 		log.Fatalf("Failed to create chat bot handler: %v", err)
 	}
 	chatBotHandler = pkghandlers.NewSignallingHandler(pkghandlers.WithPingHandler(chatBotDCHandler), cli.ICEServer, cli.Debug, nil)
-	chatBotRunner := getWsRunnerByDerivedCfg("ChatBot")
+	chatBotRunner := getWsRunnerByDerivedCfg("ChatBot", "CHATBOT_JWT_TOKEN")
 	go chatBotRunner.Run(ctx, chatBotHandler)
 	log.Println("Chat bot started!")
 

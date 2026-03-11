@@ -31,6 +31,7 @@ type WebSocketRunner struct {
 	TLSConfig             *tls.Config
 	Resolver              *net.Resolver
 	PreferIPv6            bool
+	JWTEnvName            string
 }
 
 func (runner *WebSocketRunner) getDialer() *websocket.Dialer {
