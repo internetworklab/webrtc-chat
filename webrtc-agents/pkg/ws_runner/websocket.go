@@ -34,6 +34,15 @@ type WebSocketRunner struct {
 	JWTEnvName            string
 }
 
+func (runner *WebSocketRunner) getJWT() string {
+	if envName := runner.JWTEnvName; envName != "" {
+		if envVal := os.Getenv(envName); envVal != "" {
+			return envVal
+		}
+	}
+	return ""
+}
+
 func (runner *WebSocketRunner) getDialer() *websocket.Dialer {
 	dialer := &websocket.Dialer{
 		Proxy:            http.ProxyFromEnvironment,
@@ -105,7 +114,12 @@ func (runner *WebSocketRunner) Run(ctx context.Context, handler pkghandlers.Gene
 
 			// Establish WebSocket connection
 
-			wsConn, _, err := runner.getDialer().Dial(u.String(), nil)
+			var requestHeaders http.Header = nil
+			if jwt := runner.getJWT(); jwt != "" {
+				requestHeaders = make(http.Header)
+				requestHeaders.Set("Authorization", "bearer "+jwt)
+			}
+			wsConn, _, err := runner.getDialer().Dial(u.String(), requestHeaders)
 			if err == nil {
 				func(wsConn *websocket.Conn, ctx context.Context) {
 					defer wsConn.Close()

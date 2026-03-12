@@ -2,20 +2,24 @@
 
 set -e
 
-current_path=$(realpath $0)
-cd $(dirname $current_path)/..
-
-echo Using $(pwd) as current working directory
-
 if [ -z $MANAGEMENT_API ]; then
     echo "MANAGEMENT_API is not set"
     exit 1
 fi
+MANAGEMENT_API=$(realpath $MANAGEMENT_API)
+echo MANAGEMENT_API: $MANAGEMENT_API
 
 if [ -z $AVATAR_B64_PATH ]; then
     echo "AVATAR_B64_PATH is not set"
     exit 1
 fi
+AVATAR_B64_PATH=$(realpath $AVATAR_B64_PATH)
+echo AVATAR_B64_PATH: $AVATAR_B64_PATH
+
+current_path=$(realpath $0)
+cd $(dirname $current_path)/..
+
+echo Using $(pwd) as current working directory
 
 echo "Getting Bot JWT token for EchoBot ..."
 echobot_token=$(MANAGEMENT_API=$MANAGEMENT_API scripts/create-bot-account.sh echo_bot EchoBot $AVATAR_B64_PATH)
