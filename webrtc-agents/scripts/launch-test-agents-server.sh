@@ -1,24 +1,41 @@
 #!/bin/bash
 
-
 set -e
 
-MANAGEMENT_API=../webrtc-server/management.sock
+current_path=$(realpath $0)
+cd $(dirname $current_path)/..
+
+echo Using $(pwd) as current working directory
+
+if [ -z $MANAGEMENT_API ]; then
+    echo "MANAGEMENT_API is not set"
+    exit 1
+fi
+
+if [ -z $AVATAR_B64_PATH ]; then
+    echo "AVATAR_B64_PATH is not set"
+    exit 1
+fi
 
 echo "Getting Bot JWT token for EchoBot ..."
-echobot_token=$(echo todo)
+echobot_token=$(MANAGEMENT_API=$MANAGEMENT_API scripts/create-bot-account.sh echo_bot EchoBot $AVATAR_B64_PATH)
+echo "Done, got ${echobot_token}"
 
 echo "Getting Bot JWT token for MusicBot ..."
-musicbot_token=$(echo todo)
+musicbot_token=$(MANAGEMENT_API=$MANAGEMENT_API scripts/create-bot-account.sh music_bot MusicBot $AVATAR_B64_PATH)
+echo "Done, got ${musicbot_token}"
 
 echo "Getting Bot JWT token for CounterBot ..."
-counterbot_token=$(echo todo)
+counterbot_token=$(MANAGEMENT_API=$MANAGEMENT_API scripts/create-bot-account.sh counter_bot CounterBot $AVATAR_B64_PATH)
+echo "Done, got ${counterbot_token}"
 
 echo "Getting Bot JWT token for ClockBot ..."
-clockbot_token=$(echo todo)
+clockbot_token=$(MANAGEMENT_API=$MANAGEMENT_API scripts/create-bot-account.sh clock_bot ClockBot $AVATAR_B64_PATH)
+echo "Done, got ${clockbot_token}"
 
 echo "Getting Bot JWT token for ChatBot ..."
-chatbot_token=$(echo todo)
+chatbot_token=$(MANAGEMENT_API=$MANAGEMENT_API scripts/create-bot-account.sh chat_bot ChatBot $AVATAR_B64_PATH)
+echo "Done, got ${chatbot_token}"
 
 echo "Generating .env.bot file in current directory $PWD"
 echo "ECHOBOT_JWT_TOKEN=$echobot_token" > .env.bots
