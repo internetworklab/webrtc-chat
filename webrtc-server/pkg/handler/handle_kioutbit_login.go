@@ -187,7 +187,7 @@ func (h *KioubitLoginHandler) handleAuthorizationCode(w http.ResponseWriter, r *
 	var userObject *pkguser.User
 
 	for i := 0; i < maxRetries; i++ {
-		userObject, _, err = h.UserManager.LoadOrCreateNewUserByGithubId(ctx, newUser.DN42ASN, newUser)
+		userObject, _, err = h.UserManager.LoadOrCreateNewUserByDN42ASN(ctx, newUser.DN42ASN, newUser)
 		if err == nil {
 			break
 		}
