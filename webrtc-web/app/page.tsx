@@ -1946,8 +1946,8 @@ export default function Home() {
           connecting={wsConnStatus === WSConnStatusShort.Connecting}
           preference={preference}
           onPreferenceChange={setPreference}
-          onPinServer={(pinnedServer, preference, loggedInAs) => {
-            connect(pinnedServer, loggedInAs ? undefined : preference);
+          onPinServer={(pinnedServer, preference, hasLoggedIn) => {
+            connect(pinnedServer, hasLoggedIn ? undefined : preference);
             setPinnedServer(pinnedServer.id);
           }}
           servers={servers}

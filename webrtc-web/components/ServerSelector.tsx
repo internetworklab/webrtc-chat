@@ -27,7 +27,7 @@ export function ServerSelector(props: {
   onPinServer: (
     server: WSServer,
     preference: Preference | undefined,
-    loggedInAs: Profile | undefined,
+    hasLoggedIn: boolean,
   ) => void;
   connecting: boolean;
   onLogout: () => void;
@@ -83,9 +83,9 @@ export function ServerSelector(props: {
 
   const handleConnect = () => {
     const server = servers.find((server) => server.id === selectedServerId);
-    if (server && !isProfileDataLoading) {
+    if (server && !isLoginStatusLoading) {
       // the app will automatically tries to connect to a pinned server
-      onPinServer(server, preference, profileData);
+      onPinServer(server, preference, !!profileStatusData?.logged_in);
     }
   };
 
