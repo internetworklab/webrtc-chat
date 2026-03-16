@@ -7,8 +7,10 @@ networks:
     enable_ipv6: true
     ipam:
       config:
-        - subnet: "fdda:8ca4:1556:a007::/64"
-          gateway: "fdda:8ca4:1556:a007:ffff::1"
+        - subnet: "${DN42_SUBNET}"
+          gateway: "${DN42_HOST_GW}"
+volumes:
+  caddydata:
 services:
   web:
     container_name: dn42-webrtc-chat
@@ -16,9 +18,12 @@ services:
     pull_policy: always
     networks:
       dn42-webrtc-chat:
-        ipv6_address: "fdda:8ca4:1556:a007::1"
+        ipv6_address: "${DN42_ULA}"
     volumes:
       - "./caddy.json:/caddy.json:ro"
+      - "./dn42-root-ca.crt:/dn42-root-ca.crt:ro"
+      - "./resolv.conf:/etc/resolv.conf:ro"
+      - "caddydata:/caddydata"
     command:
       - "caddy"
       - "run"

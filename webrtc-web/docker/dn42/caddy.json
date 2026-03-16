@@ -1,21 +1,82 @@
 {
-    "apps": {
-        "http": {
-            "servers": {
-                "example": {
-                    "listen": [":2015"],
-                    "routes": [
-                        {
-                            "handle": [
-                                {
-                                    "handler": "static_response",
-                                    "body": "Hello, world!"
-                                }
-                            ]
-                        }
-                    ]
-                }
-            }
+  "logging": {
+    "logs": {
+      "default": {
+        "writer": {
+          "output": "stdout"
+        },
+        "encoder": {
+          "format": "console"
         }
+      }
     }
+  },
+  "storage": {
+    "module": "file_system",
+    "root": "/caddydata"
+  },
+  "apps": {
+    "tls": {
+      "automation": {
+        "policies": [
+          {
+            "issuers": [
+              {
+                "module": "acme",
+                "ca": "https://acme.burble.dn42/v1/staging/acme/directory",
+                "test_ca": "https://acme.burble.dn42/v1/staging/acme/directory",
+                "email": "i@exploro.one",
+                "acme_timeout": "300s",
+                "challenges": {
+                  "http": {
+                    "disabled": false
+                  },
+                  "tls-alpn": {
+                    "disabled": true
+                  }
+                },
+                "trusted_roots_pem_files": ["/dn42-root-ca.crt"]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "http": {
+      "servers": {
+        "main": {
+          "listen": [":2015"],
+          "logs": {},
+          "routes": [
+            {
+              "handle": [
+                {
+                  "handler": "static_response",
+                  "body": "Hello, world!"
+                }
+              ]
+            }
+          ]
+        },
+        "hello": {
+          "listen": [":443"],
+          "routes": [
+            {
+              "match": [
+                {
+                  "host": ["chat.dn42"]
+                }
+              ],
+              "handle": [
+                {
+                  "handler": "static_response",
+                  "body": "Hello, privacy!"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
 }
