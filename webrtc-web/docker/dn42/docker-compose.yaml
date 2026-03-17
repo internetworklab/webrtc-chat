@@ -16,6 +16,7 @@ services:
     image: docker.io/coturn/coturn:latest
     restart: unless-stopped
     container_name: dn42-webrtc-coturn
+    hostname: "dn42-webrtc-coturn"
     networks:
       dn42-webrtc-chat:
         ipv6_address: "${DN42_STUN_ULA}"
@@ -29,9 +30,12 @@ services:
     volumes:
       - "./.env:/app/.env:ro"
       - "./shared-socks:/var/run/webrtc-server"
+      - "./kioubit-login-pubkey.pem:/app/kioubit-login-pubkey.pem:ro"
     command:
       - "--allowed-origin=https://${MAIN_DOMAIN}"
-      - "--kioubit-login-redir-url=https://${KIOUBIT_LOGIN_DOMAIN}/api/kioubit/login/auth"
+      - "--allowed-origin=https://${API_SERVER_DOMAIN}"
+      - "--allowed-origin=wss://${API_SERVER_DOMAIN}"
+      - "--kioubit-login-redir-url=https://${API_SERVER_DOMAIN}/api/kioubit/login/auth"
       - "--login-success-redir-url=https://${MAIN_DOMAIN}/"
       - "--kioubit-login-pubkey=./kioubit-login-pubkey.pem"
       - "--management-listen=/var/run/webrtc-server/management.sock"
@@ -40,7 +44,7 @@ services:
       dn42-webrtc-chat:
         ipv6_address: "${DN42_SERVER_ULA}"
   agents:
-    container_name: inet-webrtc-agents
+    container_name: dn42-webrtc-agents
     image: webrtc-agents:latest
     build:
       context: "./../../../"
@@ -51,23 +55,27 @@ services:
       - "MANAGEMENT_API=/var/run/webrtc-server/management.sock"
       - "AVATAR_B64_PATH=/app/bot-avatar.png.dataurl"
     volumes:
+      - "./resolv.conf:/etc/resolv.conf:ro"
       - "./bots_entrypoint.sh:/app/entrypoint.sh:ro"
       - "./.env:/app/.env:ro"
       - "./bot-avatar.png.dataurl:/app/bot-avatar.png.dataurl:ro"
       - "./shared-socks:/var/run/webrtc-server"
+      - "./dn42-root-ca.crt:/dn42-root-ca.crt:ro"
     working_dir: /app
     depends_on:
       - server
     command:
       - "/app/agents"
       - "--chatbot-model=deepseek/deepseek-v3.2"
-      - "--ws-server=wss://${MAIN_DOMAIN}/api/ws"
-      - "--ice-server=${DN42_STUN_URI}"
+      - "--ws-server=wss://${API_SERVER_DOMAIN}/api/ws"
+      - "--ice-server=stun:dn42-webrtc-coturn:3478"
       - "--reconnect-on-disconnect"
       - "--reconnect-delay=3s"
       - "--openrouter-apikey-env=OPENROUTER_APIKEY"
       - "--prefer-ipv6=true"
       - "--bots-secret-env-file=.env.bots"
+      - "--custom-resolver=${CUSTOM_RESOLVER}"
+      - "--custom-ca=/dn42-root-ca.crt"
     networks:
       dn42-webrtc-chat:
         ipv6_address: "${DN42_AGENTS_ULA}"

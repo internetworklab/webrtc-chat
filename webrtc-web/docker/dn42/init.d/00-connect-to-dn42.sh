@@ -57,4 +57,4 @@ ip route add fd00::/8 via fe80::1 dev "${br_name}" table "${table_id}" &>/dev/nu
 $ipCMD1 l set "${inject_if_name}" vrf vrf42
 $ipCMD1 l set "${inject_if_name}" up
 $ipCMD1 a add fe80::1/64 dev "${inject_if_name}"
-$ipCMD1 route add "${DN42_ULA}/128" dev "${inject_if_name}" vrf vrf42
+$ipCMD1 route add "${DN42_SUBNET}" dev "${inject_if_name}" vrf vrf42

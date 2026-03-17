@@ -85,7 +85,7 @@
               "handler": "reverse_proxy",
               "upstreams": [
                 {
-                  "dial": "dn42-webrtc-server:3001"
+                  "dial": "signalling.chat.dn42:3001"
                 }
               ],
               "rewrite": {

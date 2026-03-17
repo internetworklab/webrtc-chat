@@ -59,16 +59,6 @@ func main() {
 		log.Println("No .env file found or error loading .env file, continuing with existing environment variables")
 	}
 
-	gh_cli_id := os.Getenv("GH_LOGIN_CLIENT_ID")
-	if gh_cli_id == "" {
-		log.Fatalf("Github OAuth Client Id not found")
-	}
-
-	gh_cli_sec := os.Getenv("GH_LOGIN_CLIENT_SECRET")
-	if gh_cli_sec == "" {
-		log.Fatalf("Github OAuth Client Secret not found")
-	}
-
 	// initiate UserManager and UserSessionManager, and
 	// inject them to where is needed
 	userMgr := &pkguser.MemoryUserManager{}
@@ -115,14 +105,20 @@ func main() {
 		UserSessionManager: userSessionMgr,
 	})
 
-	mux.Handle("/github/login/", &pkghandler.GithubOAuthLoginHandler{
-		GithubOAuthClientId:     gh_cli_id,
-		GithubOAuthAppSecret:    gh_cli_sec,
-		GithubOAuthRedirURL:     cli.GithubLoginRedirectURL,
-		LoginSuccessRedirectURL: cli.LoginSuccessRedirectURL,
-		UserManager:             userMgr,
-		UserSessionManager:      userSessionMgr,
-	})
+	if gh_cli_id := os.Getenv("GH_LOGIN_CLIENT_ID"); gh_cli_id != "" {
+		if gh_cli_sec := os.Getenv("GH_LOGIN_CLIENT_SECRET"); gh_cli_sec != "" {
+			if gh_redir_url := cli.GithubLoginRedirectURL; gh_redir_url != "" {
+				mux.Handle("/github/login/", &pkghandler.GithubOAuthLoginHandler{
+					GithubOAuthClientId:     gh_cli_id,
+					GithubOAuthAppSecret:    gh_cli_sec,
+					GithubOAuthRedirURL:     gh_redir_url,
+					LoginSuccessRedirectURL: cli.LoginSuccessRedirectURL,
+					UserManager:             userMgr,
+					UserSessionManager:      userSessionMgr,
+				})
+			}
+		}
+	}
 
 	mux.Handle("/profile/avatar", &pkghandler.ProfileAvatarHandler{
 		UserManager:        userMgr,
