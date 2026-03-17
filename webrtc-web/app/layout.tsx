@@ -18,6 +18,7 @@ import DarkModeIcon from "@mui/icons-material/DarkMode";
 import ContrastIcon from "@mui/icons-material/Contrast";
 import { firstLetterCap } from "@/utls/strings";
 import { Menu } from "@mui/icons-material";
+import { ModeSelector } from "@/components/ModeSelector";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -75,52 +76,12 @@ const theme = createTheme({
   },
 });
 
-const modes = ["system", "dark", "light"];
-
-function ModeSelector() {
-  const { mode, setMode } = useColorScheme();
-  if (!mode) {
-    return null;
-  }
-  return (
-    <Fragment>
-      <Tooltip title={`Mode: ${firstLetterCap(mode)}`}>
-        <IconButton
-          onClick={() => {
-            const idx = modes.findIndex((m) => m === mode);
-            if (idx !== -1 && modes.length >= 1) {
-              const nextIdx = (idx + 1) % modes.length;
-              const nextMode = modes[nextIdx];
-              setMode(nextMode as any);
-            }
-          }}
-        >
-          {mode === "light" ? (
-            <LightModeIcon />
-          ) : mode === "dark" ? (
-            <DarkModeIcon />
-          ) : mode === "system" ? (
-            <ContrastIcon />
-          ) : (
-            <ContrastIcon />
-          )}
-        </IconButton>
-      </Tooltip>
-    </Fragment>
-  );
-}
-
+// With MUI theme (and CSS baseline, of course)
 function WithMUITheme(props: { children: React.ReactNode }) {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
       {props.children}
-
-      <Box sx={{ position: "absolute", top: 0, right: 0 }}>
-        <Box sx={{ padding: 1 }}>
-          <ModeSelector />
-        </Box>
-      </Box>
     </ThemeProvider>
   );
 }
