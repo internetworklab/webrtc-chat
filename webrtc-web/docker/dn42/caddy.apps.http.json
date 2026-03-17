@@ -4,22 +4,10 @@
       "listen": [":443", ":80"],
       "routes": [
         {
+          "group": "main",
           "match": [
             {
-              "host": ["chat.dn42"]
-            }
-          ],
-          "handle": [
-            {
-              "handler": "file_server",
-              "root": "/usr/share/nginx/html"
-            }
-          ]
-        },
-        {
-          "match": [
-            {
-              "host": ["chat.duststars.dn42"],
+              "host": ["chat.dn42"],
               "path": ["/api/*"]
             }
           ],
@@ -92,7 +80,22 @@
                 "strip_path_prefix": "/api"
               }
             }
-          ]
+          ],
+          "terminal": true
+        },
+        {
+          "match": [
+            {
+              "host": ["chat.dn42"]
+            }
+          ],
+          "handle": [
+            {
+              "handler": "file_server",
+              "root": "/usr/share/nginx/html"
+            }
+          ],
+          "group": "main"
         }
       ]
     }

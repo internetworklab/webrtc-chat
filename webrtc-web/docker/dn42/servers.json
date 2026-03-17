@@ -1,17 +1,11 @@
 [
   {
-    "url": "wss://chat.duststars.dn42/api/ws",
+    "url": "/api/ws",
     "name": "DN42 & NeoNetwork",
     "id": "dn42",
     "iceServers": ["stun:webrtc-stun.chat.dn42:3478"],
-    "apiPrefix": "https://chat.duststars.dn42/api",
-    "idp": [
-      {
-        "name": "Kioubit",
-        "kind": "kioubit",
-        "loginUrl": "https://chat.duststars.dn42/api/kioubit/login/start"
-      }
-    ],
+    "apiPrefix": "/api",
+    "idp": [],
     "allowAnonymous": true
   }
 ]

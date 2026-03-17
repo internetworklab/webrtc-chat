@@ -13,6 +13,7 @@ import (
 
 type CookieSessionManager struct {
 	sessionStore sync.Map
+	CookieDomain string
 }
 
 func (sessMngr *CookieSessionManager) getRandomSessionId() string {
@@ -45,12 +46,16 @@ func (sessMngr *CookieSessionManager) CreateSession(ctx context.Context, w http.
 	sessMngr.sessionStore.Store(sessionId, struct{}{})
 
 	// Set the cookie on the response
-	http.SetCookie(w, &http.Cookie{
+	cookieObj := &http.Cookie{
 		Name:     "session_id",
 		Value:    sessionId,
 		Path:     "/",
 		HttpOnly: true,
-	})
+	}
+	if domain := sessMngr.CookieDomain; domain != "" {
+		cookieObj.Domain = domain
+	}
+	http.SetCookie(w, cookieObj)
 
 	return sessionId
 }

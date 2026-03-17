@@ -36,6 +36,7 @@ type CLI struct {
 	LoginSuccessRedirectURL   string        `name:"login-success-redir-url" help:"The page to which the user will be redirect to once oauth login is successful, this usually should be the home page for a typical SPA web app" default:"http://localhost:3000/"`
 	KioubitLoginPubkey        string        `name:"kioubit-login-pubkey" help:"The path to the PEM pubkey file in order to use the Sign in with Kioubit service, this is optional"`
 	ManagementListenAddress   string        `name:"management-listen" help:"Unix domain socket path listener of management API" default:"/var/run/webrtc-server/management.sock"`
+	CookieDomain              string        `name:"cookie-domain" help:"Only for issuing third-party cookie, use with caution" default:""`
 }
 
 var cli CLI
@@ -133,7 +134,9 @@ func main() {
 		UserSessionManager: userSessionMgr,
 	})
 
-	sessMngr := &pkgsession.CookieSessionManager{}
+	sessMngr := &pkgsession.CookieSessionManager{
+		CookieDomain: cli.CookieDomain,
+	}
 	tokenMngr := pkgmyjwt.NewSimpleJWTManager(nil)
 	if tokenMngr == nil {
 		log.Fatal(errors.New("failed to initialize token manager"))

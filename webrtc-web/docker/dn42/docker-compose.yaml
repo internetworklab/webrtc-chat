@@ -33,13 +33,11 @@ services:
       - "./kioubit-login-pubkey.pem:/app/kioubit-login-pubkey.pem:ro"
     command:
       - "--allowed-origin=https://${MAIN_DOMAIN}"
-      - "--allowed-origin=https://${API_SERVER_DOMAIN}"
-      - "--allowed-origin=wss://${API_SERVER_DOMAIN}"
-      - "--kioubit-login-redir-url=https://${API_SERVER_DOMAIN}/api/kioubit/login/auth"
+      - "--allowed-origin=wss://${MAIN_DOMAIN}"
+      - "--kioubit-login-redir-url=https://${MAIN_DOMAIN}/api/kioubit/login/auth"
       - "--login-success-redir-url=https://${MAIN_DOMAIN}/"
       - "--kioubit-login-pubkey=./kioubit-login-pubkey.pem"
       - "--management-listen=/var/run/webrtc-server/management.sock"
-      - "--debug=true"
     networks:
       dn42-webrtc-chat:
         ipv6_address: "${DN42_SERVER_ULA}"
@@ -67,7 +65,7 @@ services:
     command:
       - "/app/agents"
       - "--chatbot-model=deepseek/deepseek-v3.2"
-      - "--ws-server=wss://${API_SERVER_DOMAIN}/api/ws"
+      - "--ws-server=wss://${MAIN_DOMAIN}/api/ws"
       - "--ice-server=stun:dn42-webrtc-coturn:3478"
       - "--reconnect-on-disconnect"
       - "--reconnect-delay=3s"
