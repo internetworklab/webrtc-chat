@@ -12,9 +12,69 @@ networks:
 volumes:
   caddydata:
 services:
+  stun:
+    image: docker.io/coturn/coturn:latest
+    restart: unless-stopped
+    container_name: dn42-webrtc-coturn
+    networks:
+      dn42-webrtc-chat:
+        ipv6_address: "${DN42_STUN_ULA}"
+  server:
+    container_name: dn42-webrtc-server
+    hostname: dn42-webrtc-server
+    build:
+      context: "./../../../webrtc-server"
+    image: webrtc-server:latest
+    pull_policy: never
+    volumes:
+      - "./.env:/app/.env:ro"
+      - "./shared-socks:/var/run/webrtc-server"
+    command:
+      - "--allowed-origin=https://${MAIN_DOMAIN}"
+      - "--kioubit-login-redir-url=https://${KIOUBIT_LOGIN_DOMAIN}/api/kioubit/login/auth"
+      - "--login-success-redir-url=https://${MAIN_DOMAIN}/"
+      - "--kioubit-login-pubkey=./kioubit-login-pubkey.pem"
+      - "--management-listen=/var/run/webrtc-server/management.sock"
+      - "--debug=true"
+    networks:
+      dn42-webrtc-chat:
+        ipv6_address: "${DN42_SERVER_ULA}"
+  agents:
+    container_name: inet-webrtc-agents
+    image: webrtc-agents:latest
+    build:
+      context: "./../../../"
+      dockerfile: "webrtc-agents/Dockerfile"
+    pull_policy: never
+    entrypoint: /app/entrypoint.sh
+    environment:
+      - "MANAGEMENT_API=/var/run/webrtc-server/management.sock"
+      - "AVATAR_B64_PATH=/app/bot-avatar.png.dataurl"
+    volumes:
+      - "./bots_entrypoint.sh:/app/entrypoint.sh:ro"
+      - "./.env:/app/.env:ro"
+      - "./bot-avatar.png.dataurl:/app/bot-avatar.png.dataurl:ro"
+      - "./shared-socks:/var/run/webrtc-server"
+    working_dir: /app
+    depends_on:
+      - server
+    command:
+      - "/app/agents"
+      - "--chatbot-model=deepseek/deepseek-v3.2"
+      - "--ws-server=wss://${MAIN_DOMAIN}/api/ws"
+      - "--ice-server=${DN42_STUN_URI}"
+      - "--reconnect-on-disconnect"
+      - "--reconnect-delay=3s"
+      - "--openrouter-apikey-env=OPENROUTER_APIKEY"
+      - "--prefer-ipv6=true"
+      - "--bots-secret-env-file=.env.bots"
+    networks:
+      dn42-webrtc-chat:
+        ipv6_address: "${DN42_AGENTS_ULA}"
   web:
     container_name: dn42-webrtc-chat
     image: webrtc-chat:latest-caddy
+    pull_policy: never
     environment:
       - "ACME_CONTACT_EMAIL=${ACME_CONTACT_EMAIL}"
       - "CADDY_ADMIN_ADDR=${CADDY_ADMIN_ADDR}"

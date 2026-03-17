@@ -22,7 +22,7 @@ FROM docker.io/library/caddy:latest AS prod-caddy
 COPY --from=builder /app/out /usr/share/nginx/html
 
 
-FROM nginx:alpine AS prod-nginx
+FROM docker.io/library/nginx:alpine AS prod-nginx
 
 # Copy static assets from builder stage
 COPY --from=builder /app/out /usr/share/nginx/html
