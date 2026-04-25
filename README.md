@@ -1,4 +1,4 @@
-# WebRTC Chat Demo
+# WebRTC-Chat 
 
 A browser-to-browser P2P chat application built on WebRTC data channels, with a lightweight signalling server and a suite of programmable bot agents. All messages and file transfers flow directly between peers—no server-side message storage.
 
